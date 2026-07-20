@@ -1,19 +1,12 @@
-import { BookOpen, Clapperboard, Flower2, Shell, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Visualizer } from './components/Visualizer';
 import { poems } from './lib/poems';
-import { scenes } from './visuals/scenes';
-
-const sceneIcons = {
-  octopus: Shell,
-  daisies: Flower2,
-  pages: BookOpen,
-  film: Clapperboard,
-};
+import { findScene, scenes, type SceneId } from './visuals/registry';
 
 export function App() {
-  const [activeSceneId, setActiveSceneId] = useState(scenes[0].id);
-  const activeScene = scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0];
+  const [activeSceneId, setActiveSceneId] = useState<SceneId>(scenes[0].id);
+  const activeScene = findScene(activeSceneId);
 
   return (
     <main className="app-shell">
@@ -30,8 +23,8 @@ export function App() {
 
         <nav className="scene-dock" aria-label="Cambiar visualizacion">
           {scenes.map((scene) => {
-            const Icon = sceneIcons[scene.id];
             const isActive = scene.id === activeScene.id;
+            const Icon = scene.Icon;
 
             return (
               <button
