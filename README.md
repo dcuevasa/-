@@ -96,6 +96,27 @@ git push
 
 Cuando el push llegue a GitHub, Actions actualizara automaticamente `gh-pages`.
 
+## Modificar textos y tiempos
+
+Los textos visibles de la pagina y los tiempos principales del visualizador estan centralizados en:
+
+```text
+src/siteConfig.ts
+```
+
+Edita `siteCopy` para cambiar titulos, subtitulos y labels. Para ocultar la intro de la vista principal, cambia `siteCopy.hero.showIntro` a `false`. Edita `visualizerTiming` para ajustar cuanto tiempo aparece el texto, cuanto tarda en reaparecer tras inactividad, cuanto movimiento continuo oculta la UI y como se suaviza el movimiento del puntero.
+
+## Agregar dibujos o textos
+
+Los documentos se cargan automaticamente segun la carpeta donde esten:
+
+```text
+docs/dibujo/  Dibujos y arte ASCII
+docs/texto/   Poemas y textos
+```
+
+Puedes agregar archivos `.md` o `.txt`. La carpeta define si se muestra como `dibujo` o `texto`, y la extension define si se renderiza como Markdown o texto preformateado.
+
 ## Agregar una nueva visualizacion
 
 Cada visualizacion vive en su propio modulo dentro de:
@@ -121,7 +142,8 @@ src/visuals/types.ts          Contratos compartidos de escenas
 src/visuals/registry.ts       Registro central de visualizaciones
 src/visuals/scenes/           Modulos independientes de cada escena
 src/visuals/utils/            Utilidades de Canvas y movimiento
-src/lib/poems.ts              Carga de textos y dibujos desde docs/
+src/lib/documents.ts          Carga automatica de docs/dibujo y docs/texto
+src/siteConfig.ts             Textos visibles y tiempos editables
 src/styles.css                Estilos globales
 docs/                         Dibujos y poemas originales
 ```

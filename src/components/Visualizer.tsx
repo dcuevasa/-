@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { visualizerTiming } from '../siteConfig';
 import type { SceneDefinition } from '../visuals/registry';
 
 type VisualizerProps = {
@@ -84,11 +85,11 @@ export function Visualizer({ scene }: VisualizerProps) {
     const draw = (time: number) => {
       const rect = canvas.getBoundingClientRect();
       const seconds = time / 1000;
-      const delta = lastTime === 0 ? 1 / 60 : Math.min(0.05, seconds - lastTime);
+      const delta = lastTime === 0 ? visualizerTiming.firstFrameDeltaSeconds : Math.min(visualizerTiming.maxFrameDeltaSeconds, seconds - lastTime);
       lastTime = seconds;
       runtime.render({ context, time: seconds, delta, width: rect.width, height: rect.height, pointer: pointerRef.current });
-      pointerRef.current.dx *= 0.82;
-      pointerRef.current.dy *= 0.82;
+      pointerRef.current.dx *= visualizerTiming.pointerVelocityDecay;
+      pointerRef.current.dy *= visualizerTiming.pointerVelocityDecay;
       frame = requestAnimationFrame(draw);
     };
 

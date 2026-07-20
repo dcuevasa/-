@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { DocumentContent } from './components/DocumentContent';
 import { Visualizer } from './components/Visualizer';
 import { documents } from './lib/documents';
+import { siteCopy, visualizerTiming } from './siteConfig';
 import { findScene, scenes, type SceneId } from './visuals/registry';
-
-const HERO_TEXT_VISIBLE_MS = 9000;
-const HERO_TEXT_IDLE_MS = 7000;
-const HERO_POINTER_HIDE_MS = 10000;
 
 export function App() {
   const [activeSceneId, setActiveSceneId] = useState<SceneId>(scenes[0].id);
@@ -26,7 +23,7 @@ export function App() {
     const revealHeroText = () => {
       window.clearTimeout(hideHeroTextTimer.current);
       setIsHeroTextVisible(true);
-      hideHeroTextTimer.current = window.setTimeout(() => setIsHeroTextVisible(false), HERO_TEXT_VISIBLE_MS);
+      hideHeroTextTimer.current = window.setTimeout(() => setIsHeroTextVisible(false), visualizerTiming.heroTextVisibleMs);
     };
 
     const registerInteraction = () => {
@@ -34,7 +31,7 @@ export function App() {
       window.clearTimeout(idleHeroTextTimer.current);
       window.clearTimeout(pointerHideTimer.current);
       setIsHeroTextVisible(false);
-      idleHeroTextTimer.current = window.setTimeout(revealHeroText, HERO_TEXT_IDLE_MS);
+      idleHeroTextTimer.current = window.setTimeout(revealHeroText, visualizerTiming.heroTextIdleMs);
     };
 
     const isInsideHero = (event: PointerEvent | TouchEvent) => {
@@ -58,8 +55,8 @@ export function App() {
       window.clearTimeout(pointerHideTimer.current);
       pointerHideTimer.current = window.setTimeout(() => {
         setIsHeroTextVisible(false);
-        idleHeroTextTimer.current = window.setTimeout(revealHeroText, HERO_TEXT_IDLE_MS);
-      }, HERO_POINTER_HIDE_MS);
+        idleHeroTextTimer.current = window.setTimeout(revealHeroText, visualizerTiming.heroTextIdleMs);
+      }, visualizerTiming.heroPointerHideMs);
     };
 
     revealHeroText();
@@ -79,18 +76,16 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero" aria-label="Visualizador principal">
+      <section className="hero" aria-label={siteCopy.hero.visualizerLabel}>
         <Visualizer scene={activeScene} />
 
         <div className={isHeroTextVisible ? 'hero-content is-visible' : 'hero-content'}>
-          <p className="eyebrow">Un cielo privado para mirar despacio</p>
-          <h1>Cosas que te gustan, moviendose como si supieran tu nombre.</h1>
-          <p className="intro">
-            Pulpos, margaritas, paginas y pelicula viva en una ventana que se puede seguir ampliando con nuevas escenas.
-          </p>
+          <p className="eyebrow">{siteCopy.hero.eyebrow}</p>
+          <h1>{siteCopy.hero.title}</h1>
+          {siteCopy.hero.showIntro && siteCopy.hero.intro ? <p className="intro">{siteCopy.hero.intro}</p> : null}
         </div>
 
-        <nav className={isHeroTextVisible ? 'scene-dock is-visible' : 'scene-dock'} aria-label="Cambiar visualizacion">
+        <nav className={isHeroTextVisible ? 'scene-dock is-visible' : 'scene-dock'} aria-label={siteCopy.hero.scenePickerLabel}>
           {scenes.map((scene) => {
             const isActive = scene.id === activeScene.id;
             const Icon = scene.Icon;
@@ -112,10 +107,10 @@ export function App() {
         </nav>
       </section>
 
-      <section className="document-section" aria-label="Dibujos y poemas guardados">
+      <section className="document-section" aria-label={siteCopy.documents.sectionLabel}>
         <div className="section-heading">
-          <p className="eyebrow">Archivo compartido</p>
-          <h2>Dibujos y textos que ya estaban aqui</h2>
+          <p className="eyebrow">{siteCopy.documents.eyebrow}</p>
+          <h2>{siteCopy.documents.title}</h2>
         </div>
 
         <div className="document-list">
