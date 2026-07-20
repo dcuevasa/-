@@ -11,6 +11,7 @@ export function App() {
   const hideHeroTextTimer = useRef<number | undefined>(undefined);
   const idleHeroTextTimer = useRef<number | undefined>(undefined);
   const pointerHideTimer = useRef<number | undefined>(undefined);
+  const isPointerInWindow = useRef(true);
   const activeScene = findScene(activeSceneId);
 
   useEffect(() => {
@@ -21,9 +22,38 @@ export function App() {
     };
 
     const revealHeroText = () => {
+      if (!document.hasFocus() || !isPointerInWindow.current) {
+        setIsHeroTextVisible(false);
+        return;
+      }
+
       window.clearTimeout(hideHeroTextTimer.current);
       setIsHeroTextVisible(true);
       hideHeroTextTimer.current = window.setTimeout(() => setIsHeroTextVisible(false), visualizerTiming.heroTextVisibleMs);
+    };
+
+    const hideHeroText = () => {
+      clearHeroTimers();
+      setIsHeroTextVisible(false);
+    };
+
+    const handleWindowFocus = () => {
+      isPointerInWindow.current = true;
+      revealHeroText();
+    };
+
+    const handleWindowBlur = () => {
+      hideHeroText();
+    };
+
+    const handlePointerEnter = () => {
+      isPointerInWindow.current = true;
+      if (document.hasFocus()) revealHeroText();
+    };
+
+    const handlePointerLeave = () => {
+      isPointerInWindow.current = false;
+      hideHeroText();
     };
 
     const registerInteraction = () => {
@@ -60,6 +90,10 @@ export function App() {
     };
 
     revealHeroText();
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('pointerenter', handlePointerEnter);
+    document.addEventListener('pointerleave', handlePointerLeave);
     window.addEventListener('scroll', revealHeroText, { passive: true });
     window.addEventListener('pointermove', registerHeroPointerMove, { passive: true });
     window.addEventListener('touchmove', registerHeroPointerMove, { passive: true });
@@ -67,6 +101,10 @@ export function App() {
 
     return () => {
       clearHeroTimers();
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('pointerenter', handlePointerEnter);
+      document.removeEventListener('pointerleave', handlePointerLeave);
       window.removeEventListener('scroll', revealHeroText);
       window.removeEventListener('pointermove', registerHeroPointerMove);
       window.removeEventListener('touchmove', registerHeroPointerMove);
