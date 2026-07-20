@@ -13,7 +13,6 @@ type Octopus = {
   pulseSpeed: number;
   turnSpeed: number;
   color: string;
-  accent: string;
   seed: number;
   inkCooldown: number;
   startled: number;
@@ -28,16 +27,10 @@ type InkDrop = {
   life: number;
 };
 
-const octopusColors = [
-  ['#f06f8f', '#f7b3c2'],
-  ['#ec6fbd', '#f3b4dc'],
-  ['#f28b6c', '#f4c1a2'],
-  ['#d87edb', '#ebb6ec'],
-] as const;
+const octopusColors = ['#f06f8f', '#ec6fbd', '#f28b6c', '#d87edb'] as const;
 
 function createOctopus(width: number, height: number, seed: number): Octopus {
   const angle = randomRange(0, TAU);
-  const colors = octopusColors[seed % octopusColors.length];
   return {
     x: randomRange(-80, width + 80),
     y: randomRange(-60, height + 60),
@@ -48,8 +41,7 @@ function createOctopus(width: number, height: number, seed: number): Octopus {
     pulse: randomRange(0, TAU),
     pulseSpeed: randomRange(2.4, 3.7),
     turnSpeed: randomRange(1.4, 2.2),
-    color: colors[0],
-    accent: colors[1],
+    color: octopusColors[seed % octopusColors.length],
     seed,
     inkCooldown: 0,
     startled: 0,
@@ -86,21 +78,12 @@ function drawOctopus(context: CanvasRenderingContext2D, octopus: Octopus, time: 
     context.stroke();
   }
 
-  const bodyGradient = context.createRadialGradient(0, -mantleLength * 0.18, 0, 0, -mantleLength * 0.18, mantleLength);
-  bodyGradient.addColorStop(0, octopus.accent);
-  bodyGradient.addColorStop(0.42, octopus.color);
-  bodyGradient.addColorStop(1, '#9b315d');
-  context.fillStyle = bodyGradient;
+  context.fillStyle = octopus.color;
   context.beginPath();
   context.ellipse(0, -octopus.size * 0.15, mantleWidth, mantleLength, 0, 0, TAU);
   context.fill();
 
-  context.fillStyle = octopus.color;
-  context.beginPath();
-  context.ellipse(0, octopus.size * 0.26, octopus.size * 0.62, octopus.size * 0.42, 0, 0, TAU);
-  context.fill();
-
-  context.fillStyle = '#fff2f7';
+  context.fillStyle = '#ffd6df';
   context.beginPath();
   context.ellipse(-octopus.size * 0.24, -octopus.size * 0.42, octopus.size * 0.12, octopus.size * 0.18, -0.25, 0, TAU);
   context.ellipse(octopus.size * 0.24, -octopus.size * 0.42, octopus.size * 0.12, octopus.size * 0.18, 0.25, 0, TAU);
@@ -154,9 +137,7 @@ function updateOctopus(
     octopus.vy += Math.sin(targetAngle) * repulsion;
 
     if (pointerDistance < octopus.size * 1.45 && octopus.inkCooldown === 0) {
-      const colors = octopusColors[Math.floor(randomRange(0, octopusColors.length))];
-      octopus.color = colors[0];
-      octopus.accent = colors[1];
+      octopus.color = octopusColors[Math.floor(randomRange(0, octopusColors.length))];
       octopus.vx += Math.cos(targetAngle) * 245;
       octopus.vy += Math.sin(targetAngle) * 245;
       octopus.pulse = Math.PI / 2;
@@ -237,7 +218,7 @@ function createOctopusScene(): SceneRuntime {
     resize(nextWidth, nextHeight) {
       width = nextWidth;
       height = nextHeight;
-      const count = clamp(Math.round((width * height) / 90000), 5, 11);
+      const count = clamp(Math.round((width * height) / 180000), 3, 5);
       octopuses = Array.from({ length: count }, (_, index) => octopuses[index] ?? createOctopus(width, height, index + 1));
     },
     render({ context, time, delta, pointer }) {

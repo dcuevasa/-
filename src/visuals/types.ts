@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-export type SceneId = 'octopus' | 'daisies' | 'pages' | 'film';
+export type SceneId = 'octopus' | 'daisies' | 'pages' | 'film' | 'drawings';
 
 export type PointerPosition = {
   x: number;
