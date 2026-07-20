@@ -192,6 +192,33 @@ function drawRipples(context: CanvasRenderingContext2D, ripples: MeasurementRipp
   }
 }
 
+function drawQuantumGate(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const pulse = Math.sin(time * 3) * 0.5 + 0.5;
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+  const radius = Math.min(width, height) * (0.18 + pulse * 0.025);
+
+  context.save();
+  context.strokeStyle = `rgba(244, 207, 106, ${0.48 + pulse * 0.3})`;
+  context.lineWidth = 2.4;
+  for (let ring = 0; ring < 4; ring += 1) {
+    context.beginPath();
+    context.arc(centerX, centerY, radius + ring * 24 + pulse * 10, 0, TAU);
+    context.stroke();
+  }
+
+  context.fillStyle = 'rgba(244, 207, 106, 0.12)';
+  context.beginPath();
+  context.arc(centerX, centerY, radius * 1.7, 0, TAU);
+  context.fill();
+  context.fillStyle = '#f4cf6a';
+  context.font = `750 ${Math.min(width * 0.09, height * 0.11, 70)}px Fraunces, serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label ?? '11:11', centerX, centerY);
+  context.restore();
+}
+
 function createQuantumScene(): SceneRuntime {
   const ripples: MeasurementRipple[] = [];
   let width = 1;
@@ -208,11 +235,21 @@ function createQuantumScene(): SceneRuntime {
         qubit.pair = (index + Math.floor(count / 2)) % count;
       });
     },
-    render({ context, time, delta, width, height, pointer }) {
+    render({ context, time, delta, width, height, pointer, specialEvent }) {
       drawBackground(context, time, width, height, pointer);
+      if (specialEvent.active) drawQuantumGate(context, time, width, height, specialEvent.label);
       drawEntanglement(context, qubits, time);
       drawRipples(context, ripples, delta);
-      for (const qubit of qubits) {
+      for (const [index, qubit] of qubits.entries()) {
+        if (specialEvent.active) {
+          const targetAngle = (index / qubits.length) * TAU + time * 0.42;
+          const targetRadius = Math.min(width, height) * 0.28;
+          const targetX = width * 0.5 + Math.cos(targetAngle) * targetRadius;
+          const targetY = height * 0.5 + Math.sin(targetAngle) * targetRadius;
+          qubit.vx += (targetX - qubit.x) * delta * 1.6;
+          qubit.vy += (targetY - qubit.y) * delta * 1.6;
+          qubit.energy = Math.max(qubit.energy, 0.86);
+        }
         updateQubit(qubit, qubits, ripples, pointer, delta, time, width, height);
         drawQubit(context, qubit, time);
       }

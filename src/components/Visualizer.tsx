@@ -1,14 +1,27 @@
-import { useEffect, useRef } from 'react';
-import { visualizerTiming } from '../siteConfig';
+import { useEffect, useRef, useState } from 'react';
+import { visualizerFeatures, visualizerTiming } from '../siteConfig';
 import type { SceneDefinition } from '../visuals/registry';
 
 type VisualizerProps = {
   scene: SceneDefinition;
 };
 
+function getMirrorHour(date: Date) {
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+
+  return hours === minutes ? `${hours}:${minutes}` : null;
+}
+
 export function Visualizer({ scene }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointerRef = useRef({ x: 0.5, y: 0.5, dx: 0, dy: 0, active: false });
+  const [testSpecialEvent, setTestSpecialEvent] = useState<string | null>(null);
+  const testSpecialEventRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    testSpecialEventRef.current = testSpecialEvent;
+  }, [testSpecialEvent]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,7 +100,16 @@ export function Visualizer({ scene }: VisualizerProps) {
       const seconds = time / 1000;
       const delta = lastTime === 0 ? visualizerTiming.firstFrameDeltaSeconds : Math.min(visualizerTiming.maxFrameDeltaSeconds, seconds - lastTime);
       lastTime = seconds;
-      runtime.render({ context, time: seconds, delta, width: rect.width, height: rect.height, pointer: pointerRef.current });
+      const specialEventLabel = testSpecialEventRef.current ?? getMirrorHour(new Date());
+      runtime.render({
+        context,
+        time: seconds,
+        delta,
+        width: rect.width,
+        height: rect.height,
+        pointer: pointerRef.current,
+        specialEvent: { active: Boolean(specialEventLabel), label: specialEventLabel },
+      });
       pointerRef.current.dx *= visualizerTiming.pointerVelocityDecay;
       pointerRef.current.dy *= visualizerTiming.pointerVelocityDecay;
       frame = requestAnimationFrame(draw);
@@ -112,5 +134,14 @@ export function Visualizer({ scene }: VisualizerProps) {
     };
   }, [scene]);
 
-  return <canvas ref={canvasRef} className="visualizer" aria-label={scene.description} />;
+  return (
+    <>
+      <canvas ref={canvasRef} className="visualizer" aria-label={scene.description} />
+      {visualizerFeatures.showSpecialEventTestButton ? (
+        <button className="special-event-test" type="button" onClick={() => setTestSpecialEvent((current) => (current ? null : '11:11'))}>
+          {testSpecialEvent ? 'Ocultar evento especial' : 'Probar evento especial'}
+        </button>
+      ) : null}
+    </>
+  );
 }

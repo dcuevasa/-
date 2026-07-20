@@ -32,6 +32,31 @@ function drawDaisy(context: CanvasRenderingContext2D, x: number, y: number, size
   context.restore();
 }
 
+function drawDaisyCrown(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const centerX = width * 0.5;
+  const centerY = height * 0.44;
+  const pulse = Math.sin(time * 2.8) * 0.5 + 0.5;
+
+  context.save();
+  const glow = context.createRadialGradient(centerX, centerY, 0, centerX, centerY, Math.min(width, height) * 0.38);
+  glow.addColorStop(0, `rgba(255, 239, 151, ${0.34 + pulse * 0.18})`);
+  glow.addColorStop(1, 'rgba(255, 239, 151, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = 'rgba(255, 248, 223, 0.56)';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.arc(centerX, centerY, Math.min(width, height) * 0.2 + pulse * 10, 0, TAU);
+  context.stroke();
+  if (label) {
+    context.fillStyle = 'rgba(68, 74, 39, 0.72)';
+    context.font = '750 16px Outfit, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(label, centerX, centerY);
+  }
+  context.restore();
+}
+
 function createDaisiesScene(): SceneRuntime {
   const seeds = createParticles(46);
   let width = 1;
@@ -69,10 +94,20 @@ function createDaisiesScene(): SceneRuntime {
 
   return {
     resize,
-    render({ context, time, delta, width, height, pointer }) {
+    render({ context, time, delta, width, height, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#9fbf88', '#e5d29e']);
-      for (const daisy of daisies) {
+      if (specialEvent.active) drawDaisyCrown(context, time, width, height, specialEvent.label);
+      for (const [index, daisy] of daisies.entries()) {
         applyBreeze(daisy, pointer, delta);
+        if (specialEvent.active) {
+          const targetAngle = (index / daisies.length) * TAU - time * 0.5;
+          const targetRadius = Math.min(width, height) * 0.2;
+          const targetX = width * 0.5 + Math.cos(targetAngle) * targetRadius;
+          const targetY = height * 0.44 + Math.sin(targetAngle) * targetRadius;
+          daisy.vx += (targetX - daisy.x) * delta * 0.9;
+          daisy.vy += (targetY - daisy.y) * delta * 0.9;
+          daisy.spin += delta * 1.8;
+        }
         daisy.vx += Math.sin(time * 0.9 + daisy.seed) * 0.018;
         daisy.vy += 0.018;
         daisy.x += daisy.vx * delta;

@@ -28,7 +28,7 @@ type VirtualPet = {
 type PetDefinition = {
   type: VirtualPetType;
   create: (index: number, width: number, height: number) => VirtualPet;
-  draw: (context: CanvasRenderingContext2D, pet: VirtualPet, time: number) => void;
+  draw: (context: CanvasRenderingContext2D, pet: VirtualPet, time: number, lift?: number) => void;
   update: (pet: VirtualPet, grass: GrassBlade[], pointer: PointerPosition, delta: number, width: number, height: number) => void;
 };
 
@@ -138,10 +138,10 @@ function updateCow(pet: VirtualPet, grass: GrassBlade[], pointer: PointerPositio
   eatNearbyGrass(pet, grass);
 }
 
-function drawCow(context: CanvasRenderingContext2D, pet: VirtualPet, time: number) {
+function drawCow(context: CanvasRenderingContext2D, pet: VirtualPet, time: number, lift = 0) {
   const hop = pet.jump + Math.abs(Math.sin(time * 5 + pet.seed)) * (pet.scared > 0 ? 4 : 1.5);
   const x = pet.x;
-  const y = pet.y - hop;
+  const y = pet.y - hop - lift;
   const direction = pet.direction;
   const headDip = pet.grazeTimer > 0 && pet.scared === 0 ? 10 : 0;
 
@@ -198,6 +198,51 @@ function drawCow(context: CanvasRenderingContext2D, pet: VirtualPet, time: numbe
   context.restore();
 }
 
+function drawUfo(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const x = width * 0.5 + Math.sin(time * 0.7) * width * 0.16;
+  const y = height * 0.19 + Math.cos(time * 0.9) * 14;
+  const beamWidth = Math.min(width * 0.34, 260);
+
+  context.save();
+  const beam = context.createLinearGradient(x, y + 22, x, height * 0.82);
+  beam.addColorStop(0, 'rgba(190, 255, 210, 0.36)');
+  beam.addColorStop(1, 'rgba(190, 255, 210, 0)');
+  context.fillStyle = beam;
+  context.beginPath();
+  context.moveTo(x - 36, y + 16);
+  context.lineTo(x + 36, y + 16);
+  context.lineTo(x + beamWidth, height * 0.82);
+  context.lineTo(x - beamWidth, height * 0.82);
+  context.closePath();
+  context.fill();
+
+  context.fillStyle = '#d8f7ef';
+  context.strokeStyle = '#2d5b55';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.ellipse(x, y, 72, 18, 0, 0, TAU);
+  context.fill();
+  context.stroke();
+  context.fillStyle = '#92d7df';
+  context.beginPath();
+  context.ellipse(x, y - 14, 34, 22, 0, Math.PI, TAU);
+  context.fill();
+  context.stroke();
+  context.fillStyle = '#fff4a8';
+  for (let light = -2; light <= 2; light += 1) {
+    context.beginPath();
+    context.arc(x + light * 24, y + 2 + Math.sin(time * 8 + light) * 2, 4, 0, TAU);
+    context.fill();
+  }
+  if (label) {
+    context.fillStyle = 'rgba(255, 248, 235, 0.78)';
+    context.font = '700 14px Outfit, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(label, x, y - 38);
+  }
+  context.restore();
+}
+
 const petDefinitions: PetDefinition[] = [
   {
     type: 'cow',
@@ -222,18 +267,20 @@ function createPetsScene(): SceneRuntime {
       const count = clamp(Math.round(width / 340), 3, 6);
       pets = Array.from({ length: count }, (_, index) => pets[index] ?? cowDefinition.create(index, width, height));
     },
-    render({ context, time, delta, pointer }) {
+    render({ context, time, delta, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#9fd0d4', '#e7d6a1']);
 
       context.fillStyle = '#6ca35b';
       context.fillRect(0, height * 0.76, width, height * 0.24);
       growGrass(grass, pointer, width, height);
       drawGrass(context, grass, time);
+      if (specialEvent.active) drawUfo(context, time, width, height, specialEvent.label);
 
       const cowDefinition = petDefinitions[0];
       for (const pet of pets) {
         cowDefinition.update(pet, grass, pointer, delta, width, height);
-        cowDefinition.draw(context, pet, time);
+        const lift = specialEvent.active ? 82 + Math.sin(time * 2.8 + pet.seed) * 18 : 0;
+        cowDefinition.draw(context, pet, time, lift);
       }
     },
   };
@@ -241,7 +288,7 @@ function createPetsScene(): SceneRuntime {
 
 export const petsScene: SceneDefinition = {
   id: 'pets',
-  title: 'Mascotas',
+  title: 'Vaquitas',
   description: 'Mascotas virtuales: vacas saltando, comiendo pasto y huyendo del puntero.',
   Icon: Milk,
   create: createPetsScene,

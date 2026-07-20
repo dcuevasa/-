@@ -1,9 +1,9 @@
 export const siteCopy = {
   hero: {
-    eyebrow: 'Un cielo privado para mirar despacio',
-    title: 'Cosas que te gustan, moviendose como si supieran tu nombre.',
-    showIntro: false,
-    intro: 'Pulpos, margaritas, paginas y pelicula viva en una ventana que se puede seguir ampliando con nuevas escenas.',
+    eyebrow: 'Pagina tonta llena de cositas que te gustan',
+    title: 'Una materializacion de como me siento por ti',
+    showIntro: true,
+    intro: 'Espero que te sientas acompañada por esta visualizacion, asi como me siento acompañado por ti',
     scenePickerLabel: 'Cambiar visualizacion',
     visualizerLabel: 'Visualizador principal',
   },
@@ -21,4 +21,8 @@ export const visualizerTiming = {
   pointerVelocityDecay: 0.82,
   maxFrameDeltaSeconds: 0.05,
   firstFrameDeltaSeconds: 1 / 60,
+};
+
+export const visualizerFeatures = {
+  showSpecialEventTestButton: true,
 };

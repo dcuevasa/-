@@ -17,6 +17,10 @@ export type SceneFrame = {
   width: number;
   height: number;
   pointer: PointerPosition;
+  specialEvent: {
+    active: boolean;
+    label: string | null;
+  };
 };
 
 export type SceneRuntime = {

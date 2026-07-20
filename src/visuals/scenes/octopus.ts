@@ -205,6 +205,49 @@ function renderInk(context: CanvasRenderingContext2D, inkDrops: InkDrop[], delta
   }
 }
 
+function drawTideMoon(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const moonX = width * 0.5 + Math.sin(time * 0.45) * width * 0.12;
+  const moonY = height * 0.2;
+  const pulse = Math.sin(time * 2.2) * 0.5 + 0.5;
+
+  context.save();
+  const glow = context.createRadialGradient(moonX, moonY, 0, moonX, moonY, Math.min(width, height) * 0.42);
+  glow.addColorStop(0, `rgba(223, 245, 255, ${0.38 + pulse * 0.18})`);
+  glow.addColorStop(1, 'rgba(223, 245, 255, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+
+  context.fillStyle = '#eaf8ff';
+  context.beginPath();
+  context.arc(moonX, moonY, 34 + pulse * 5, 0, TAU);
+  context.fill();
+  context.fillStyle = '#123f72';
+  context.beginPath();
+  context.arc(moonX + 15, moonY - 5, 31, 0, TAU);
+  context.fill();
+
+  context.strokeStyle = 'rgba(205, 240, 255, 0.46)';
+  context.lineWidth = 2;
+  for (let wave = 0; wave < 5; wave += 1) {
+    const y = height * (0.42 + wave * 0.09) + Math.sin(time * 1.5 + wave) * 8;
+    context.beginPath();
+    for (let x = -40; x <= width + 40; x += 38) {
+      const waveY = y + Math.sin(time * 2 + x * 0.018 + wave) * 12;
+      if (x === -40) context.moveTo(x, waveY);
+      else context.lineTo(x, waveY);
+    }
+    context.stroke();
+  }
+
+  if (label) {
+    context.fillStyle = 'rgba(234, 248, 255, 0.8)';
+    context.font = '700 14px Outfit, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(label, moonX, moonY + 58);
+  }
+  context.restore();
+}
+
 function createOctopusScene(): SceneRuntime {
   const dusts = createParticles(110);
   let width = 1;
@@ -221,7 +264,7 @@ function createOctopusScene(): SceneRuntime {
       const count = clamp(Math.round((width * height) / 180000), 3, 5);
       octopuses = Array.from({ length: count }, (_, index) => octopuses[index] ?? createOctopus(width, height, index + 1));
     },
-    render({ context, time, delta, pointer }) {
+    render({ context, time, delta, pointer, specialEvent }) {
       lightX = lerp(lightX, pointer.active ? pointer.x : 0.5, 0.045);
       lightY = lerp(lightY, pointer.active ? pointer.y : 0.42, 0.045);
       clearRadial(context, width, height, lightX * width, lightY * height, ['#2263a5', '#123f72', '#07192b']);
@@ -236,9 +279,17 @@ function createOctopusScene(): SceneRuntime {
         context.fill();
       }
 
+      if (specialEvent.active) drawTideMoon(context, time, width, height, specialEvent.label);
+
       renderInk(context, inkDrops, delta);
 
       for (const octopus of octopuses) {
+        if (specialEvent.active) {
+          const tideAngle = Math.atan2(octopus.y - height * 0.3, octopus.x - width * 0.5) + Math.PI / 2;
+          octopus.vx += Math.cos(tideAngle) * 38 * delta;
+          octopus.vy += Math.sin(tideAngle) * 38 * delta - 14 * delta;
+          octopus.startled = Math.max(octopus.startled, 0.35);
+        }
         updateOctopus(octopus, inkDrops, delta, time, width, height, pointer);
         drawOctopus(context, octopus, time);
       }

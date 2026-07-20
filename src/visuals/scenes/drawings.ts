@@ -88,6 +88,29 @@ function drawSheet(context: CanvasRenderingContext2D, sheet: DrawingSheet, time:
   context.restore();
 }
 
+function drawGallerySpotlight(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const x = width * 0.5;
+  const y = height * 0.48;
+  const pulse = Math.sin(time * 2.4) * 0.5 + 0.5;
+
+  context.save();
+  const glow = context.createRadialGradient(x, y, 0, x, y, Math.min(width, height) * 0.5);
+  glow.addColorStop(0, `rgba(255, 238, 191, ${0.38 + pulse * 0.16})`);
+  glow.addColorStop(1, 'rgba(255, 238, 191, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = 'rgba(255, 248, 232, 0.62)';
+  context.lineWidth = 3;
+  context.strokeRect(x - Math.min(width * 0.22, 210), y - Math.min(height * 0.2, 130), Math.min(width * 0.44, 420), Math.min(height * 0.4, 260));
+  if (label) {
+    context.fillStyle = 'rgba(255, 248, 232, 0.82)';
+    context.font = '750 16px Outfit, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(label, x, y - Math.min(height * 0.24, 158));
+  }
+  context.restore();
+}
+
 function createDrawingsScene(): SceneRuntime {
   const entries = Object.entries(drawingModules);
   let width = 1;
@@ -100,10 +123,11 @@ function createDrawingsScene(): SceneRuntime {
       height = nextHeight;
       sheets = entries.map(([path, content], index) => sheets[index] ?? createSheet(path, content, index, width, height));
     },
-    render({ context, time, delta, pointer }) {
+    render({ context, time, delta, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#496c78', '#d4b28d']);
+      if (specialEvent.active) drawGallerySpotlight(context, time, width, height, specialEvent.label);
 
-      for (const sheet of sheets) {
+      for (const [index, sheet] of sheets.entries()) {
         const pointerX = pointer.x * width;
         const pointerY = pointer.y * height;
         const distance = Math.hypot(sheet.x - pointerX, sheet.y - pointerY);
@@ -113,6 +137,17 @@ function createDrawingsScene(): SceneRuntime {
         sheet.vy += pointer.dy * height * influence * 4 * delta;
         sheet.spin += (pointer.dx * 7 - pointer.dy * 4) * influence * delta;
         sheet.fold += (pointer.dx + pointer.dy) * influence * 2.5 * delta;
+
+        if (specialEvent.active) {
+          const column = (index % 3) - 1;
+          const row = Math.floor(index / 3) % 2 === 0 ? -1 : 1;
+          const targetX = width * 0.5 + column * Math.min(width * 0.16, 150);
+          const targetY = height * 0.48 + row * Math.min(height * 0.13, 78);
+          sheet.vx += (targetX - sheet.x) * delta * 1.3;
+          sheet.vy += (targetY - sheet.y) * delta * 1.3;
+          sheet.angle += (column * 0.08 - sheet.angle) * delta * 0.8;
+          sheet.fold += Math.sin(time * 3 + sheet.seed) * delta * 0.7;
+        }
 
         sheet.x += sheet.vx * delta;
         sheet.y += sheet.vy * delta + Math.sin(time * 0.9 + sheet.seed) * 0.18;

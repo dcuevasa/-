@@ -9,6 +9,45 @@ type FilmLane = {
   entangle: number;
 };
 
+function drawProjector(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const projectorX = width * 0.12;
+  const projectorY = height * 0.18;
+  const pulse = Math.sin(time * 8) * 0.5 + 0.5;
+
+  context.save();
+  const beam = context.createLinearGradient(projectorX, projectorY, width * 0.72, height * 0.48);
+  beam.addColorStop(0, `rgba(255, 242, 196, ${0.32 + pulse * 0.12})`);
+  beam.addColorStop(1, 'rgba(255, 242, 196, 0)');
+  context.fillStyle = beam;
+  context.beginPath();
+  context.moveTo(projectorX + 42, projectorY - 18);
+  context.lineTo(width * 0.86, height * 0.28);
+  context.lineTo(width * 0.86, height * 0.72);
+  context.lineTo(projectorX + 42, projectorY + 18);
+  context.closePath();
+  context.fill();
+
+  context.fillStyle = '#201a22';
+  context.strokeStyle = '#fff2c4';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.roundRect(projectorX - 22, projectorY - 18, 58, 36, 8);
+  context.fill();
+  context.stroke();
+  for (const reelX of [projectorX - 8, projectorX + 24]) {
+    context.beginPath();
+    context.arc(reelX, projectorY - 34, 16, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+  }
+  context.fillStyle = '#fff2c4';
+  context.font = `750 ${Math.min(width * 0.08, height * 0.1, 72)}px Fraunces, serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label ?? '11:11', width * 0.72, height * 0.48);
+  context.restore();
+}
+
 function createFilmScene(): SceneRuntime {
   const lanes: FilmLane[] = [
     { yRate: 0.22, speed: 70, offset: 0, entangle: 0 },
@@ -17,8 +56,9 @@ function createFilmScene(): SceneRuntime {
   ];
 
   return {
-    render({ context, time, delta, width, height, pointer }) {
+    render({ context, time, delta, width, height, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#261f2c', '#bb6f5a']);
+      if (specialEvent.active) drawProjector(context, time, width, height, specialEvent.label);
       const stripHeight = Math.max(86, height * 0.18);
       const pointerX = pointer.x * width;
       const pointerY = pointer.y * height;
@@ -27,9 +67,9 @@ function createFilmScene(): SceneRuntime {
       for (const [laneIndex, lane] of lanes.entries()) {
         const y = height * lane.yRate;
         const nearLane = pointer.active && Math.abs(pointerY - y) < stripHeight * 0.8;
-        lane.entangle += nearLane && pointerSpeed < 9 ? delta * 0.9 : -delta * 0.75;
+        lane.entangle += specialEvent.active || (nearLane && pointerSpeed < 9) ? delta * 0.9 : -delta * 0.75;
         lane.entangle = Math.max(0, Math.min(1, lane.entangle));
-        lane.offset += (lane.speed + pointer.dx * width * (nearLane ? 5 : 0)) * delta;
+        lane.offset += (lane.speed * (specialEvent.active ? 1.8 : 1) + pointer.dx * width * (nearLane ? 5 : 0)) * delta;
         const offset = (lane.offset % 180) - 180;
         context.save();
         context.translate(offset, y);

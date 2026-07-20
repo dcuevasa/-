@@ -500,6 +500,43 @@ function drawSparks(context: CanvasRenderingContext2D, sparks: Spark[], delta: n
   }
 }
 
+function drawEsnupiPortal(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const x = width * 0.5;
+  const y = height * 0.25;
+  const pulse = Math.sin(time * 3) * 0.5 + 0.5;
+  const radius = Math.min(width, height) * (0.11 + pulse * 0.015);
+
+  context.save();
+  const glow = context.createRadialGradient(x, y, 0, x, y, radius * 3.2);
+  glow.addColorStop(0, `rgba(255, 241, 168, ${0.42 + pulse * 0.2})`);
+  glow.addColorStop(0.42, 'rgba(143, 203, 208, 0.22)');
+  glow.addColorStop(1, 'rgba(143, 203, 208, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+
+  context.strokeStyle = `rgba(255, 248, 236, ${0.62 + pulse * 0.28})`;
+  context.lineWidth = 3;
+  for (let ring = 0; ring < 3; ring += 1) {
+    context.beginPath();
+    context.ellipse(x, y, radius + ring * 16, radius * 0.52 + ring * 8, time * 0.4 + ring * 0.7, 0, TAU);
+    context.stroke();
+  }
+
+  context.fillStyle = '#fff1a8';
+  context.font = '700 18px Outfit, sans-serif';
+  context.textAlign = 'center';
+  for (let star = 0; star < 7; star += 1) {
+    const angle = (star / 7) * TAU + time * 0.8;
+    context.fillText('✦', x + Math.cos(angle) * radius * 1.55, y + Math.sin(angle) * radius * 0.9);
+  }
+  if (label) {
+    context.fillStyle = 'rgba(255, 248, 236, 0.82)';
+    context.font = '750 15px Outfit, sans-serif';
+    context.fillText(label, x, y + radius * 1.35);
+  }
+  context.restore();
+}
+
 function updateBird(bird: Bird, esnupi: Esnupi, pointer: PointerPosition, delta: number, width: number, height: number) {
   const idleX = width * 0.5 + Math.sin(bird.wing * 0.22) * width * 0.22;
   const idleY = height * 0.42 + Math.cos(bird.wing * 0.28) * 34;
@@ -601,10 +638,11 @@ function createEsnupiScene(): SceneRuntime {
       esnupi = { ...esnupi, x: width * 0.5, y: height * 0.67 };
       bird = { ...bird, x: width * 0.42, y: height * 0.42 };
     },
-    render({ context, time, delta, pointer }) {
+    render({ context, time, delta, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#8fcbd0', '#f0d49b']);
       const houseX = width * 0.5;
       const houseY = height * 0.73;
+      if (specialEvent.active) drawEsnupiPortal(context, time, width, height, specialEvent.label);
 
       context.fillStyle = '#6caf66';
       context.fillRect(0, height * 0.76, width, height * 0.24);
@@ -617,8 +655,20 @@ function createEsnupiScene(): SceneRuntime {
         context.stroke();
       }
 
+      if (specialEvent.active && esnupi.activity !== 'chase') {
+        esnupi.activity = 'pilot';
+        esnupi.activityTime = Math.max(esnupi.activityTime, 2.5);
+      }
       updateEsnupi(esnupi, bird, pointer, delta, width, height, sparks);
       updateBird(bird, esnupi, pointer, delta, width, height);
+      if (specialEvent.active) {
+        const orbit = time * 1.9;
+        const targetX = width * 0.5 + Math.cos(orbit) * Math.min(width * 0.22, 170);
+        const targetY = height * 0.25 + Math.sin(orbit) * Math.min(height * 0.1, 58);
+        bird.vx += (targetX - bird.x) * delta * 1.6;
+        bird.vy += (targetY - bird.y) * delta * 1.6;
+        if (Math.random() < delta * 2.2) sparks.push({ x: bird.x, y: bird.y, vx: randomRange(-14, 14), vy: randomRange(-18, -6), life: 0.8, text: '✦' });
+      }
       drawHouse(context, houseX, houseY);
       drawProps(context, esnupi, time, houseX, houseY);
       drawEsnupi(context, esnupi, time, houseX, houseY);

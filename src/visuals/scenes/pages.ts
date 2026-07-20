@@ -1,6 +1,6 @@
 import { BookOpen } from 'lucide-react';
 import type { PointerPosition, SceneDefinition, SceneRuntime } from '../types';
-import { clearLinear, createParticles, randomRange, wrap } from '../utils/canvas';
+import { clearLinear, createParticles, randomRange, TAU, wrap } from '../utils/canvas';
 
 type Page = {
   x: number;
@@ -55,6 +55,51 @@ function drawPage(context: CanvasRenderingContext2D, page: Page, time: number) {
   context.restore();
 }
 
+function drawOpenBook(context: CanvasRenderingContext2D, time: number, width: number, height: number, label: string | null) {
+  const x = width * 0.5;
+  const y = height * 0.56;
+  const bookWidth = Math.min(width * 0.46, 360);
+  const bookHeight = Math.min(height * 0.22, 140);
+  const pulse = Math.sin(time * 2.6) * 0.5 + 0.5;
+
+  context.save();
+  const glow = context.createRadialGradient(x, y - bookHeight * 0.2, 0, x, y - bookHeight * 0.2, bookWidth * 0.86);
+  glow.addColorStop(0, `rgba(255, 237, 179, ${0.32 + pulse * 0.18})`);
+  glow.addColorStop(1, 'rgba(255, 237, 179, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+
+  context.fillStyle = 'rgba(255, 248, 232, 0.94)';
+  context.strokeStyle = 'rgba(89, 68, 55, 0.42)';
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(x, y - bookHeight * 0.42);
+  context.bezierCurveTo(x - bookWidth * 0.18, y - bookHeight * 0.62, x - bookWidth * 0.42, y - bookHeight * 0.48, x - bookWidth * 0.48, y + bookHeight * 0.35);
+  context.bezierCurveTo(x - bookWidth * 0.2, y + bookHeight * 0.18, x - bookWidth * 0.08, y + bookHeight * 0.28, x, y + bookHeight * 0.42);
+  context.bezierCurveTo(x + bookWidth * 0.08, y + bookHeight * 0.28, x + bookWidth * 0.2, y + bookHeight * 0.18, x + bookWidth * 0.48, y + bookHeight * 0.35);
+  context.bezierCurveTo(x + bookWidth * 0.42, y - bookHeight * 0.48, x + bookWidth * 0.18, y - bookHeight * 0.62, x, y - bookHeight * 0.42);
+  context.fill();
+  context.stroke();
+
+  context.strokeStyle = 'rgba(118, 87, 62, 0.24)';
+  for (let line = 0; line < 5; line += 1) {
+    context.beginPath();
+    context.moveTo(x - bookWidth * 0.36, y - bookHeight * 0.23 + line * 18);
+    context.quadraticCurveTo(x - bookWidth * 0.18, y - bookHeight * 0.3 + line * 15, x - bookWidth * 0.04, y - bookHeight * 0.1 + line * 12);
+    context.moveTo(x + bookWidth * 0.36, y - bookHeight * 0.23 + line * 18);
+    context.quadraticCurveTo(x + bookWidth * 0.18, y - bookHeight * 0.3 + line * 15, x + bookWidth * 0.04, y - bookHeight * 0.1 + line * 12);
+    context.stroke();
+  }
+
+  if (label) {
+    context.fillStyle = 'rgba(255, 248, 232, 0.78)';
+    context.font = '750 18px Outfit, sans-serif';
+    context.textAlign = 'center';
+    context.fillText(label, x, y - bookHeight * 0.72);
+  }
+  context.restore();
+}
+
 function createPagesScene(): SceneRuntime {
   const seeds = createParticles(30);
   let width = 1;
@@ -92,10 +137,21 @@ function createPagesScene(): SceneRuntime {
 
   return {
     resize,
-    render({ context, time, delta, width, height, pointer }) {
+    render({ context, time, delta, width, height, pointer, specialEvent }) {
       clearLinear(context, width, height, ['#6d8a8c', '#d9b894']);
-      for (const page of pages) {
+      if (specialEvent.active) drawOpenBook(context, time, width, height, specialEvent.label);
+      for (const [index, page] of pages.entries()) {
         applyWind(page, pointer, delta);
+        if (specialEvent.active) {
+          const angle = (index / pages.length) * TAU + time * 0.95;
+          const radius = Math.min(width, height) * 0.24;
+          const targetX = width * 0.5 + Math.cos(angle) * radius;
+          const targetY = height * 0.44 + Math.sin(angle) * radius * 0.55;
+          page.vx += (targetX - page.x) * delta * 1.25;
+          page.vy += (targetY - page.y) * delta * 1.25;
+          page.spin += delta * 2.2;
+          page.fold += Math.sin(time * 4 + index) * delta;
+        }
         page.vx += Math.sin(time * 0.6 + page.seed) * 0.05;
         page.vy += Math.cos(time * 0.5 + page.seed) * 0.04;
         page.x += page.vx * delta;
