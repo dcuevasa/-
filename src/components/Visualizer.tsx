@@ -7,7 +7,7 @@ type VisualizerProps = {
 
 export function Visualizer({ scene }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pointerRef = useRef({ x: 0.5, y: 0.5, active: false });
+  const pointerRef = useRef({ x: 0.5, y: 0.5, dx: 0, dy: 0, active: false });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -35,6 +35,8 @@ export function Visualizer({ scene }: VisualizerProps) {
       const delta = lastTime === 0 ? 1 / 60 : Math.min(0.05, seconds - lastTime);
       lastTime = seconds;
       runtime.render({ context, time: seconds, delta, width: rect.width, height: rect.height, pointer: pointerRef.current });
+      pointerRef.current.dx *= 0.82;
+      pointerRef.current.dy *= 0.82;
       frame = requestAnimationFrame(draw);
     };
 
@@ -56,14 +58,18 @@ export function Visualizer({ scene }: VisualizerProps) {
       aria-label={scene.description}
       onPointerMove={(event) => {
         const bounds = event.currentTarget.getBoundingClientRect();
+        const x = (event.clientX - bounds.left) / bounds.width;
+        const y = (event.clientY - bounds.top) / bounds.height;
         pointerRef.current = {
-          x: (event.clientX - bounds.left) / bounds.width,
-          y: (event.clientY - bounds.top) / bounds.height,
+          x,
+          y,
+          dx: x - pointerRef.current.x,
+          dy: y - pointerRef.current.y,
           active: true,
         };
       }}
       onPointerLeave={() => {
-        pointerRef.current = { ...pointerRef.current, active: false };
+        pointerRef.current = { ...pointerRef.current, dx: 0, dy: 0, active: false };
       }}
     />
   );

@@ -13,11 +13,31 @@ type Octopus = {
   pulseSpeed: number;
   turnSpeed: number;
   color: string;
+  accent: string;
   seed: number;
+  inkCooldown: number;
+  startled: number;
 };
+
+type InkDrop = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  life: number;
+};
+
+const octopusColors = [
+  ['#f06f8f', '#f7b3c2'],
+  ['#ec6fbd', '#f3b4dc'],
+  ['#f28b6c', '#f4c1a2'],
+  ['#d87edb', '#ebb6ec'],
+] as const;
 
 function createOctopus(width: number, height: number, seed: number): Octopus {
   const angle = randomRange(0, TAU);
+  const colors = octopusColors[seed % octopusColors.length];
   return {
     x: randomRange(-80, width + 80),
     y: randomRange(-60, height + 60),
@@ -28,8 +48,11 @@ function createOctopus(width: number, height: number, seed: number): Octopus {
     pulse: randomRange(0, TAU),
     pulseSpeed: randomRange(2.4, 3.7),
     turnSpeed: randomRange(1.4, 2.2),
-    color: seed % 2 === 0 ? '#f08a9d' : '#e98fbf',
+    color: colors[0],
+    accent: colors[1],
     seed,
+    inkCooldown: 0,
+    startled: 0,
   };
 }
 
@@ -58,21 +81,26 @@ function drawOctopus(context: CanvasRenderingContext2D, octopus: Octopus, time: 
       baseX + tentacle * octopus.size * 0.08,
       extension + speed * 0.22,
     );
-    context.lineWidth = octopus.size * (tentacle === 0 ? 0.08 : 0.055);
-    context.strokeStyle = `rgba(240, 138, 157, ${tentacle === 0 ? 0.76 : 0.58})`;
+    context.lineWidth = octopus.size * (tentacle === 0 ? 0.1 : 0.07);
+    context.strokeStyle = octopus.color;
     context.stroke();
   }
 
   const bodyGradient = context.createRadialGradient(0, -mantleLength * 0.18, 0, 0, -mantleLength * 0.18, mantleLength);
-  bodyGradient.addColorStop(0, 'rgba(255, 216, 225, 0.96)');
-  bodyGradient.addColorStop(0.48, octopus.color);
-  bodyGradient.addColorStop(1, 'rgba(144, 61, 104, 0.62)');
+  bodyGradient.addColorStop(0, octopus.accent);
+  bodyGradient.addColorStop(0.42, octopus.color);
+  bodyGradient.addColorStop(1, '#9b315d');
   context.fillStyle = bodyGradient;
   context.beginPath();
   context.ellipse(0, -octopus.size * 0.15, mantleWidth, mantleLength, 0, 0, TAU);
   context.fill();
 
-  context.fillStyle = 'rgba(255, 245, 250, 0.68)';
+  context.fillStyle = octopus.color;
+  context.beginPath();
+  context.ellipse(0, octopus.size * 0.26, octopus.size * 0.62, octopus.size * 0.42, 0, 0, TAU);
+  context.fill();
+
+  context.fillStyle = '#fff2f7';
   context.beginPath();
   context.ellipse(-octopus.size * 0.24, -octopus.size * 0.42, octopus.size * 0.12, octopus.size * 0.18, -0.25, 0, TAU);
   context.ellipse(octopus.size * 0.24, -octopus.size * 0.42, octopus.size * 0.12, octopus.size * 0.18, 0.25, 0, TAU);
@@ -86,24 +114,65 @@ function drawOctopus(context: CanvasRenderingContext2D, octopus: Octopus, time: 
   context.restore();
 }
 
-function updateOctopus(octopus: Octopus, delta: number, time: number, width: number, height: number, pointer: PointerPosition) {
+function splashInk(inkDrops: InkDrop[], octopus: Octopus, awayAngle: number) {
+  for (let index = 0; index < 18; index += 1) {
+    const angle = awayAngle + Math.PI + randomRange(-0.85, 0.85);
+    const speed = randomRange(70, 220);
+    inkDrops.push({
+      x: octopus.x - Math.cos(octopus.angle) * octopus.size * 0.6,
+      y: octopus.y - Math.sin(octopus.angle) * octopus.size * 0.6,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      radius: randomRange(8, 26),
+      life: randomRange(0.55, 1.15),
+    });
+  }
+}
+
+function updateOctopus(
+  octopus: Octopus,
+  inkDrops: InkDrop[],
+  delta: number,
+  time: number,
+  width: number,
+  height: number,
+  pointer: PointerPosition,
+) {
   const pointerX = pointer.x * width;
   const pointerY = pointer.y * height;
   const pointerDistance = Math.hypot(pointerX - octopus.x, pointerY - octopus.y);
   const wanderAngle = Math.sin(time * 0.42 + octopus.seed) * 0.85 + Math.cos(time * 0.21 + octopus.seed) * 0.45;
   let targetAngle = octopus.angle + wanderAngle * delta;
 
-  if (pointer.active && pointerDistance < 360) {
-    targetAngle = Math.atan2(pointerY - octopus.y, pointerX - octopus.x);
+  octopus.inkCooldown = Math.max(0, octopus.inkCooldown - delta);
+  octopus.startled = Math.max(0, octopus.startled - delta * 1.8);
+
+  if (pointer.active && pointerDistance < 320) {
+    targetAngle = Math.atan2(octopus.y - pointerY, octopus.x - pointerX);
+    const repulsion = ((320 - pointerDistance) / 320) * 110 * delta;
+    octopus.vx += Math.cos(targetAngle) * repulsion;
+    octopus.vy += Math.sin(targetAngle) * repulsion;
+
+    if (pointerDistance < octopus.size * 1.45 && octopus.inkCooldown === 0) {
+      const colors = octopusColors[Math.floor(randomRange(0, octopusColors.length))];
+      octopus.color = colors[0];
+      octopus.accent = colors[1];
+      octopus.vx += Math.cos(targetAngle) * 245;
+      octopus.vy += Math.sin(targetAngle) * 245;
+      octopus.pulse = Math.PI / 2;
+      octopus.inkCooldown = 0.65;
+      octopus.startled = 1;
+      splashInk(inkDrops, octopus, targetAngle);
+    }
   } else if (octopus.x < 80 || octopus.x > width - 80 || octopus.y < 80 || octopus.y > height - 80) {
     targetAngle = Math.atan2(height * 0.5 - octopus.y, width * 0.5 - octopus.x);
   }
 
-  octopus.angle = angleLerp(octopus.angle, targetAngle, clamp(delta * octopus.turnSpeed, 0, 0.08));
-  octopus.pulse = wrap(octopus.pulse + delta * octopus.pulseSpeed, 0, TAU);
+  octopus.angle = angleLerp(octopus.angle, targetAngle, clamp(delta * (octopus.turnSpeed + octopus.startled * 4), 0, 0.16));
+  octopus.pulse = wrap(octopus.pulse + delta * octopus.pulseSpeed * (1 + octopus.startled * 1.8), 0, TAU);
 
   const contraction = Math.max(0, Math.sin(octopus.pulse));
-  const thrust = contraction * contraction * 62 * delta;
+  const thrust = contraction * contraction * (62 + octopus.startled * 140) * delta;
   octopus.vx += Math.cos(octopus.angle) * thrust;
   octopus.vy += Math.sin(octopus.angle) * thrust;
 
@@ -113,7 +182,7 @@ function updateOctopus(octopus: Octopus, delta: number, time: number, width: num
   octopus.vy += currentY;
 
   const speed = Math.hypot(octopus.vx, octopus.vy);
-  const maxSpeed = 86;
+  const maxSpeed = 92 + octopus.startled * 190;
   if (speed > maxSpeed) {
     octopus.vx = (octopus.vx / speed) * maxSpeed;
     octopus.vy = (octopus.vy / speed) * maxSpeed;
@@ -129,6 +198,32 @@ function updateOctopus(octopus: Octopus, delta: number, time: number, width: num
   octopus.y = wrap(octopus.y, -margin, height + margin);
 }
 
+function renderInk(context: CanvasRenderingContext2D, inkDrops: InkDrop[], delta: number) {
+  for (let index = inkDrops.length - 1; index >= 0; index -= 1) {
+    const drop = inkDrops[index];
+    drop.life -= delta;
+    drop.x += drop.vx * delta;
+    drop.y += drop.vy * delta;
+    drop.vx *= 0.982;
+    drop.vy *= 0.982;
+    drop.radius += 18 * delta;
+
+    if (drop.life <= 0) {
+      inkDrops.splice(index, 1);
+      continue;
+    }
+
+    const gradient = context.createRadialGradient(drop.x, drop.y, 0, drop.x, drop.y, drop.radius);
+    gradient.addColorStop(0, `rgba(23, 13, 46, ${0.52 * drop.life})`);
+    gradient.addColorStop(0.45, `rgba(34, 19, 70, ${0.28 * drop.life})`);
+    gradient.addColorStop(1, 'rgba(34, 19, 70, 0)');
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(drop.x, drop.y, drop.radius, 0, TAU);
+    context.fill();
+  }
+}
+
 function createOctopusScene(): SceneRuntime {
   const dusts = createParticles(110);
   let width = 1;
@@ -136,6 +231,7 @@ function createOctopusScene(): SceneRuntime {
   let lightX = 0.5;
   let lightY = 0.45;
   let octopuses: Octopus[] = [];
+  const inkDrops: InkDrop[] = [];
 
   return {
     resize(nextWidth, nextHeight) {
@@ -159,8 +255,10 @@ function createOctopusScene(): SceneRuntime {
         context.fill();
       }
 
+      renderInk(context, inkDrops, delta);
+
       for (const octopus of octopuses) {
-        updateOctopus(octopus, delta, time, width, height, pointer);
+        updateOctopus(octopus, inkDrops, delta, time, width, height, pointer);
         drawOctopus(context, octopus, time);
       }
     },

@@ -5,6 +5,8 @@ export type SceneId = 'octopus' | 'daisies' | 'pages' | 'film';
 export type PointerPosition = {
   x: number;
   y: number;
+  dx: number;
+  dy: number;
   active: boolean;
 };
 
