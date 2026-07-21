@@ -15,7 +15,7 @@ export const siteCopy = {
 };
 
 export const visualizerTiming = {
-  heroTextVisibleMs: 9000,
+  heroTextVisibleMs: 15000,
   heroTextIdleMs: 3000,
   heroPointerHideMs: 3000,
   pointerVelocityDecay: 0.82,

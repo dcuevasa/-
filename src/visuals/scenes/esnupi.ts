@@ -24,6 +24,9 @@ type Bird = {
   vx: number;
   vy: number;
   wing: number;
+  perchX: number;
+  perchY: number;
+  hasPerch: boolean;
 };
 
 type Spark = {
@@ -538,11 +541,17 @@ function drawEsnupiPortal(context: CanvasRenderingContext2D, time: number, width
 }
 
 function updateBird(bird: Bird, esnupi: Esnupi, pointer: PointerPosition, delta: number, width: number, height: number) {
+  if (pointer.active) {
+    bird.perchX = pointer.x * width;
+    bird.perchY = pointer.y * height;
+    bird.hasPerch = true;
+  }
+
   const idleX = width * 0.5 + Math.sin(bird.wing * 0.22) * width * 0.22;
   const idleY = height * 0.42 + Math.cos(bird.wing * 0.28) * 34;
   const fleeDirection = bird.x >= esnupi.x ? 1 : -1;
-  const targetX = pointer.active ? pointer.x * width : esnupi.activity === 'chase' ? bird.x + fleeDirection * 130 : idleX;
-  const targetY = pointer.active ? pointer.y * height : esnupi.activity === 'chase' ? height * 0.38 + Math.sin(bird.wing * 0.35) * 28 : idleY;
+  const targetX = bird.hasPerch ? bird.perchX : esnupi.activity === 'chase' ? bird.x + fleeDirection * 130 : idleX;
+  const targetY = bird.hasPerch ? bird.perchY : esnupi.activity === 'chase' ? height * 0.38 + Math.sin(bird.wing * 0.35) * 28 : idleY;
   bird.vx += (targetX - bird.x) * delta * 1.45;
   bird.vy += (targetY - bird.y) * delta * 1.45;
   bird.vx *= 0.92;
@@ -628,7 +637,7 @@ function createEsnupiScene(): SceneRuntime {
   let width = 1;
   let height = 1;
   let esnupi: Esnupi = { x: 0, y: 0, vx: 0, facing: 1, activity: 'sleep', activityTime: 6, writePause: 0, writeReveal: 0, writeText: randomWriteText(), blink: 0, hop: 0 };
-  let bird: Bird = { x: 0, y: 0, vx: 0, vy: 0, wing: 0 };
+  let bird: Bird = { x: 0, y: 0, vx: 0, vy: 0, wing: 0, perchX: 0, perchY: 0, hasPerch: false };
   const sparks: Spark[] = [];
 
   return {
@@ -636,7 +645,7 @@ function createEsnupiScene(): SceneRuntime {
       width = nextWidth;
       height = nextHeight;
       esnupi = { ...esnupi, x: width * 0.5, y: height * 0.67 };
-      bird = { ...bird, x: width * 0.42, y: height * 0.42 };
+      bird = { ...bird, x: width * 0.42, y: height * 0.42, perchX: bird.hasPerch ? clamp(bird.perchX, 20, width - 20) : 0, perchY: bird.hasPerch ? clamp(bird.perchY, 30, height - 40) : 0 };
     },
     render({ context, time, delta, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#8fcbd0', '#f0d49b']);

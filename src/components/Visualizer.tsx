@@ -1,13 +1,12 @@
 import { Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import missThingUrl from '../../docs/midi/i dont want to miss a thing L.mid?url';
-import manchildUrl from '../../docs/midi/sabrina carpenter - manchild.mid?url';
 import { midiFrequency, parseMidi, type MidiNote, type ParsedMidi } from '../lib/midi';
 import { visualizerFeatures, visualizerTiming } from '../siteConfig';
 import type { SceneDefinition } from '../visuals/registry';
 
 type VisualizerProps = {
   scene: SceneDefinition;
+  controlsVisible: boolean;
 };
 
 type MidiTrack = {
@@ -24,10 +23,18 @@ type AudioWindow = Window & typeof globalThis & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-const midiTracks: MidiTrack[] = [
-  { title: 'I dont want to miss a thing', url: missThingUrl },
-  { title: 'Manchild', url: manchildUrl },
-];
+const midiModules = import.meta.glob('../../docs/midi/*.mid', {
+  eager: true,
+  import: 'default',
+  query: '?url',
+}) as Record<string, string>;
+
+const midiTracks: MidiTrack[] = Object.entries(midiModules)
+  .map(([path, url]) => ({
+    title: (path.split('/').at(-1) ?? 'cancion.mid').replace(/\.mid$/i, ''),
+    url,
+  }))
+  .sort((left, right) => left.title.localeCompare(right.title));
 
 const scheduleAheadSeconds = 0.45;
 const schedulerIntervalMs = 90;
@@ -63,7 +70,7 @@ function stopScheduledNotes(notes: ScheduledNote[]) {
   notes.length = 0;
 }
 
-export function Visualizer({ scene }: VisualizerProps) {
+export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointerRef = useRef({ x: 0.5, y: 0.5, dx: 0, dy: 0, active: false });
   const musicRef = useRef({ active: false, energy: 0, beat: 0 });
@@ -78,13 +85,14 @@ export function Visualizer({ scene }: VisualizerProps) {
   const [midiError, setMidiError] = useState<string | null>(null);
   const [testSpecialEvent, setTestSpecialEvent] = useState<string | null>(null);
   const testSpecialEventRef = useRef<string | null>(null);
-  const currentTrack = midiTracks[currentTrackIndex];
+  const currentTrack = midiTracks[currentTrackIndex] ?? midiTracks[0];
 
   const loadTrack = async (trackIndex: number) => {
     const cachedTrack = parsedTracksRef.current.get(trackIndex);
     if (cachedTrack) return cachedTrack;
 
     const track = midiTracks[trackIndex];
+    if (!track) throw new Error('No hay canciones MIDI disponibles');
     const response = await fetch(track.url);
     if (!response.ok) throw new Error('No se pudo cargar el MIDI');
     const parsedTrack = parseMidi(await response.arrayBuffer(), track.title);
@@ -281,22 +289,13 @@ export function Visualizer({ scene }: VisualizerProps) {
       lastTime = seconds;
       const specialEventLabel = testSpecialEventRef.current ?? getMirrorHour(new Date());
       const music = musicRef.current;
-      const visualPointer = music.active
-        ? {
-            x: 0.5 + Math.sin(seconds * 2.2) * (0.08 + music.energy * 0.12),
-            y: 0.48 + Math.cos(seconds * 1.7) * (0.06 + music.beat * 0.06),
-            dx: pointerRef.current.dx + Math.cos(seconds * 5.2) * music.energy * 0.018,
-            dy: pointerRef.current.dy + Math.sin(seconds * 4.8) * music.energy * 0.018,
-            active: true,
-          }
-        : pointerRef.current;
       runtime.render({
         context,
         time: seconds,
         delta,
         width: rect.width,
         height: rect.height,
-        pointer: visualPointer,
+        pointer: pointerRef.current,
         music,
         specialEvent: { active: Boolean(specialEventLabel), label: specialEventLabel },
       });
@@ -327,9 +326,9 @@ export function Visualizer({ scene }: VisualizerProps) {
   return (
     <>
       <canvas ref={canvasRef} className="visualizer" aria-label={scene.description} />
-      <div className="midi-player" aria-label="Reproductor MIDI">
+      <div className={controlsVisible ? 'midi-player is-visible' : 'midi-player'} aria-label="Reproductor MIDI">
         <div className="midi-track">
-          <span>{currentTrack.title}</span>
+          <span>{currentTrack?.title ?? 'Sin canciones'}</span>
           {midiError ? <small>{midiError}</small> : <small>{isMidiPlaying ? 'sonando' : 'pausado'}</small>}
         </div>
         <div className="midi-controls">

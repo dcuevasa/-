@@ -9,20 +9,18 @@ export function App() {
   const [activeSceneId, setActiveSceneId] = useState<SceneId>(scenes[0].id);
   const [isHeroTextVisible, setIsHeroTextVisible] = useState(true);
   const hideHeroTextTimer = useRef<number | undefined>(undefined);
-  const idleHeroTextTimer = useRef<number | undefined>(undefined);
-  const pointerHideTimer = useRef<number | undefined>(undefined);
+  const heroPointerStart = useRef<{ x: number; y: number } | null>(null);
+  const isDraggingHero = useRef(false);
   const isPointerInWindow = useRef(true);
   const activeScene = findScene(activeSceneId);
 
   useEffect(() => {
     const clearHeroTimers = () => {
       window.clearTimeout(hideHeroTextTimer.current);
-      window.clearTimeout(idleHeroTextTimer.current);
-      window.clearTimeout(pointerHideTimer.current);
     };
 
-    const revealHeroText = () => {
-      if (!document.hasFocus() || !isPointerInWindow.current) {
+    const revealHeroText = (force = false) => {
+      if (!force && (!document.hasFocus() || !isPointerInWindow.current)) {
         setIsHeroTextVisible(false);
         return;
       }
@@ -46,47 +44,69 @@ export function App() {
       hideHeroText();
     };
 
-    const handlePointerEnter = () => {
+    const handlePointerEnter = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+
       isPointerInWindow.current = true;
       if (document.hasFocus()) revealHeroText();
     };
 
-    const handlePointerLeave = () => {
+    const handlePointerLeave = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return;
+
       isPointerInWindow.current = false;
       hideHeroText();
     };
 
-    const registerInteraction = () => {
-      window.clearTimeout(hideHeroTextTimer.current);
-      window.clearTimeout(idleHeroTextTimer.current);
-      window.clearTimeout(pointerHideTimer.current);
-      setIsHeroTextVisible(false);
-      idleHeroTextTimer.current = window.setTimeout(revealHeroText, visualizerTiming.heroTextIdleMs);
-    };
-
-    const isInsideHero = (event: PointerEvent | TouchEvent) => {
+    const isInsideHero = (event: { clientX: number; clientY: number }) => {
       const hero = document.querySelector<HTMLElement>('.hero');
       if (!hero) return false;
 
-      const point = 'touches' in event ? event.touches[0] : event;
-      if (!point) return false;
-
       const bounds = hero.getBoundingClientRect();
-      return point.clientX >= bounds.left && point.clientX <= bounds.right && point.clientY >= bounds.top && point.clientY <= bounds.bottom;
+      return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
     };
 
-    const registerHeroPointerMove = (event: PointerEvent | TouchEvent) => {
-      if (!isInsideHero(event)) {
-        window.clearTimeout(pointerHideTimer.current);
+    const beginHeroPointer = (event: PointerEvent) => {
+      if (!isInsideHero(event)) return;
+
+      heroPointerStart.current = { x: event.clientX, y: event.clientY };
+      isDraggingHero.current = false;
+    };
+
+    const trackHeroPointer = (event: PointerEvent) => {
+      const start = heroPointerStart.current;
+      if (!start) return;
+
+      const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      if (distance < 10) return;
+
+      isDraggingHero.current = true;
+      if (isInsideHero(event)) hideHeroText();
+    };
+
+    const endHeroPointer = (event: PointerEvent) => {
+      const start = heroPointerStart.current;
+      if (!start) return;
+
+      heroPointerStart.current = null;
+      const distance = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+      const isTap = distance < 10 && !isDraggingHero.current;
+      isDraggingHero.current = false;
+
+      if (isTap && isInsideHero(event)) {
+        revealHeroText(true);
         return;
       }
 
-      window.clearTimeout(hideHeroTextTimer.current);
-      window.clearTimeout(pointerHideTimer.current);
-      pointerHideTimer.current = window.setTimeout(() => {
-        setIsHeroTextVisible(false);
-        idleHeroTextTimer.current = window.setTimeout(revealHeroText, visualizerTiming.heroTextIdleMs);
-      }, visualizerTiming.heroPointerHideMs);
+      if (isInsideHero(event)) hideHeroText();
+    };
+
+    const handleHeroClick = (event: MouseEvent) => {
+      if (isInsideHero(event)) revealHeroText(true);
+    };
+
+    const handleKeyDown = () => {
+      revealHeroText(true);
     };
 
     revealHeroText();
@@ -94,10 +114,12 @@ export function App() {
     window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('pointerenter', handlePointerEnter);
     document.addEventListener('pointerleave', handlePointerLeave);
-    window.addEventListener('scroll', revealHeroText, { passive: true });
-    window.addEventListener('pointermove', registerHeroPointerMove, { passive: true });
-    window.addEventListener('touchmove', registerHeroPointerMove, { passive: true });
-    window.addEventListener('keydown', registerInteraction);
+    window.addEventListener('pointerdown', beginHeroPointer, { passive: true });
+    window.addEventListener('pointermove', trackHeroPointer, { passive: true });
+    window.addEventListener('pointerup', endHeroPointer, { passive: true });
+    window.addEventListener('pointercancel', hideHeroText, { passive: true });
+    window.addEventListener('click', handleHeroClick, { passive: true });
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       clearHeroTimers();
@@ -105,17 +127,19 @@ export function App() {
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('pointerenter', handlePointerEnter);
       document.removeEventListener('pointerleave', handlePointerLeave);
-      window.removeEventListener('scroll', revealHeroText);
-      window.removeEventListener('pointermove', registerHeroPointerMove);
-      window.removeEventListener('touchmove', registerHeroPointerMove);
-      window.removeEventListener('keydown', registerInteraction);
+      window.removeEventListener('pointerdown', beginHeroPointer);
+      window.removeEventListener('pointermove', trackHeroPointer);
+      window.removeEventListener('pointerup', endHeroPointer);
+      window.removeEventListener('pointercancel', hideHeroText);
+      window.removeEventListener('click', handleHeroClick);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
   return (
     <main className="app-shell">
       <section className="hero" aria-label={siteCopy.hero.visualizerLabel}>
-        <Visualizer scene={activeScene} />
+        <Visualizer scene={activeScene} controlsVisible={isHeroTextVisible} />
 
         <div className={isHeroTextVisible ? 'hero-content is-visible' : 'hero-content'}>
           <p className="eyebrow">{siteCopy.hero.eyebrow}</p>
