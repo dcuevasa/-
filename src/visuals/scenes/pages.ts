@@ -137,11 +137,17 @@ function createPagesScene(): SceneRuntime {
 
   return {
     resize,
-    render({ context, time, delta, width, height, pointer, specialEvent }) {
+    render({ context, time, delta, width, height, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#6d8a8c', '#d9b894']);
       if (specialEvent.active) drawOpenBook(context, time, width, height, specialEvent.label);
       for (const [index, page] of pages.entries()) {
         applyWind(page, pointer, delta);
+        if (music.active) {
+          page.vx += Math.cos(time * 4 + page.seed) * music.energy * 28 * delta;
+          page.vy += Math.sin(time * 5 + page.seed) * music.energy * 24 * delta - music.beat * 18 * delta;
+          page.spin += (music.beat - 0.5) * music.energy * 5 * delta;
+          page.fold += Math.sin(time * 9 + index) * music.energy * delta * 1.8;
+        }
         if (specialEvent.active) {
           const angle = (index / pages.length) * TAU + time * 0.95;
           const radius = Math.min(width, height) * 0.24;

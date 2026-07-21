@@ -1,10 +1,36 @@
+import { Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import missThingUrl from '../../docs/midi/i dont want to miss a thing L.mid?url';
+import manchildUrl from '../../docs/midi/sabrina carpenter - manchild.mid?url';
+import { midiFrequency, parseMidi, type MidiNote, type ParsedMidi } from '../lib/midi';
 import { visualizerFeatures, visualizerTiming } from '../siteConfig';
 import type { SceneDefinition } from '../visuals/registry';
 
 type VisualizerProps = {
   scene: SceneDefinition;
 };
+
+type MidiTrack = {
+  title: string;
+  url: string;
+};
+
+type ScheduledNote = {
+  oscillators: OscillatorNode[];
+  gain: GainNode;
+};
+
+type AudioWindow = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+const midiTracks: MidiTrack[] = [
+  { title: 'I dont want to miss a thing', url: missThingUrl },
+  { title: 'Manchild', url: manchildUrl },
+];
+
+const scheduleAheadSeconds = 0.45;
+const schedulerIntervalMs = 90;
 
 function getMirrorHour(date: Date) {
   const hours = date.getHours().toString().padStart(2, '0');
@@ -13,15 +39,168 @@ function getMirrorHour(date: Date) {
   return hours === minutes ? `${hours}:${minutes}` : null;
 }
 
+function noteEnergy(notes: MidiNote[], position: number) {
+  let energy = 0;
+  for (const note of notes) {
+    const distance = Math.abs(note.start - position);
+    if (distance > 0.16) continue;
+    energy = Math.max(energy, note.velocity * (1 - distance / 0.16));
+  }
+
+  return energy;
+}
+
+function stopScheduledNotes(notes: ScheduledNote[]) {
+  for (const note of notes) {
+    try {
+      note.gain.gain.cancelScheduledValues(0);
+      note.gain.gain.value = 0;
+      note.oscillators.forEach((oscillator) => oscillator.stop());
+    } catch {
+      // The node may already have finished naturally.
+    }
+  }
+  notes.length = 0;
+}
+
 export function Visualizer({ scene }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointerRef = useRef({ x: 0.5, y: 0.5, dx: 0, dy: 0, active: false });
+  const musicRef = useRef({ active: false, energy: 0, beat: 0 });
+  const parsedTracksRef = useRef(new Map<number, ParsedMidi>());
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const schedulerRef = useRef<number | undefined>(undefined);
+  const playbackStartRef = useRef(0);
+  const nextNoteIndexRef = useRef(0);
+  const scheduledNotesRef = useRef<ScheduledNote[]>([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [isMidiPlaying, setIsMidiPlaying] = useState(false);
+  const [midiError, setMidiError] = useState<string | null>(null);
   const [testSpecialEvent, setTestSpecialEvent] = useState<string | null>(null);
   const testSpecialEventRef = useRef<string | null>(null);
+  const currentTrack = midiTracks[currentTrackIndex];
+
+  const loadTrack = async (trackIndex: number) => {
+    const cachedTrack = parsedTracksRef.current.get(trackIndex);
+    if (cachedTrack) return cachedTrack;
+
+    const track = midiTracks[trackIndex];
+    const response = await fetch(track.url);
+    if (!response.ok) throw new Error('No se pudo cargar el MIDI');
+    const parsedTrack = parseMidi(await response.arrayBuffer(), track.title);
+    parsedTracksRef.current.set(trackIndex, parsedTrack);
+    return parsedTrack;
+  };
+
+  const stopMidi = () => {
+    window.clearInterval(schedulerRef.current);
+    schedulerRef.current = undefined;
+    stopScheduledNotes(scheduledNotesRef.current);
+    musicRef.current = { active: false, energy: 0, beat: 0 };
+    setIsMidiPlaying(false);
+  };
+
+  const playMidi = async (trackIndex = currentTrackIndex) => {
+    try {
+      const parsedTrack = await loadTrack(trackIndex);
+      const audioWindow = window as AudioWindow;
+      const AudioContextConstructor = audioWindow.AudioContext || audioWindow.webkitAudioContext;
+      if (!AudioContextConstructor) throw new Error('Web Audio is not supported');
+      const audioContext = audioContextRef.current ?? new AudioContextConstructor();
+      audioContextRef.current = audioContext;
+      await audioContext.resume();
+
+      stopMidi();
+      setMidiError(null);
+      setCurrentTrackIndex(trackIndex);
+      setIsMidiPlaying(true);
+      musicRef.current = { active: true, energy: 0, beat: 0 };
+      playbackStartRef.current = audioContext.currentTime;
+      nextNoteIndexRef.current = 0;
+
+      const schedule = () => {
+        const position = audioContext.currentTime - playbackStartRef.current;
+        musicRef.current = {
+          active: true,
+          energy: Math.max(noteEnergy(parsedTrack.notes, position), musicRef.current.energy * 0.88),
+          beat: Math.sin(position * Math.PI * 2 * 2.1) * 0.5 + 0.5,
+        };
+
+        while (nextNoteIndexRef.current < parsedTrack.notes.length && parsedTrack.notes[nextNoteIndexRef.current].start < position + scheduleAheadSeconds) {
+          const note = parsedTrack.notes[nextNoteIndexRef.current];
+          nextNoteIndexRef.current += 1;
+          if (note.midi < 36 || note.midi > 96) continue;
+
+          const startTime = playbackStartRef.current + note.start;
+          const duration = Math.min(Math.max(note.duration, 0.85), 2.2);
+          const frequency = midiFrequency(note.midi < 72 ? note.midi + 12 : note.midi);
+          const gain = audioContext.createGain();
+          const oscillators = [audioContext.createOscillator(), audioContext.createOscillator(), audioContext.createOscillator()];
+          const partialGains = [audioContext.createGain(), audioContext.createGain(), audioContext.createGain()];
+          const peakGain = Math.min(0.24, 0.1 + note.velocity * 0.16);
+
+          oscillators[0].type = 'triangle';
+          oscillators[1].type = 'sine';
+          oscillators[2].type = 'sine';
+          oscillators[0].frequency.setValueAtTime(frequency, startTime);
+          oscillators[1].frequency.setValueAtTime(frequency * 2.01, startTime);
+          oscillators[2].frequency.setValueAtTime(frequency * 3.02, startTime);
+
+          partialGains[0].gain.setValueAtTime(0.78, startTime);
+          partialGains[1].gain.setValueAtTime(0.32, startTime);
+          partialGains[2].gain.setValueAtTime(0.16, startTime);
+          gain.gain.setValueAtTime(0, startTime);
+          gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.008);
+          gain.gain.exponentialRampToValueAtTime(peakGain * 0.32, startTime + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+          oscillators.forEach((oscillator, partialIndex) => {
+            oscillator.connect(partialGains[partialIndex]).connect(gain).connect(audioContext.destination);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + duration + 0.05);
+          });
+          scheduledNotesRef.current.push({ oscillators, gain });
+        }
+
+        scheduledNotesRef.current = scheduledNotesRef.current.filter((note) => {
+          try {
+            return note.gain.gain.value > 0;
+          } catch {
+            return false;
+          }
+        });
+
+        if (position > parsedTrack.duration + 0.5) {
+          const nextTrackIndex = (trackIndex + 1) % midiTracks.length;
+          void playMidi(nextTrackIndex);
+        }
+      };
+
+      schedule();
+      schedulerRef.current = window.setInterval(schedule, schedulerIntervalMs);
+    } catch {
+      stopMidi();
+      setMidiError('No se pudo reproducir el MIDI');
+    }
+  };
+
+  const playPreviousTrack = () => {
+    const previousTrackIndex = (currentTrackIndex - 1 + midiTracks.length) % midiTracks.length;
+    if (isMidiPlaying) void playMidi(previousTrackIndex);
+    else setCurrentTrackIndex(previousTrackIndex);
+  };
+
+  const playNextTrack = () => {
+    const nextTrackIndex = (currentTrackIndex + 1) % midiTracks.length;
+    if (isMidiPlaying) void playMidi(nextTrackIndex);
+    else setCurrentTrackIndex(nextTrackIndex);
+  };
 
   useEffect(() => {
     testSpecialEventRef.current = testSpecialEvent;
   }, [testSpecialEvent]);
+
+  useEffect(() => stopMidi, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -101,13 +280,24 @@ export function Visualizer({ scene }: VisualizerProps) {
       const delta = lastTime === 0 ? visualizerTiming.firstFrameDeltaSeconds : Math.min(visualizerTiming.maxFrameDeltaSeconds, seconds - lastTime);
       lastTime = seconds;
       const specialEventLabel = testSpecialEventRef.current ?? getMirrorHour(new Date());
+      const music = musicRef.current;
+      const visualPointer = music.active
+        ? {
+            x: 0.5 + Math.sin(seconds * 2.2) * (0.08 + music.energy * 0.12),
+            y: 0.48 + Math.cos(seconds * 1.7) * (0.06 + music.beat * 0.06),
+            dx: pointerRef.current.dx + Math.cos(seconds * 5.2) * music.energy * 0.018,
+            dy: pointerRef.current.dy + Math.sin(seconds * 4.8) * music.energy * 0.018,
+            active: true,
+          }
+        : pointerRef.current;
       runtime.render({
         context,
         time: seconds,
         delta,
         width: rect.width,
         height: rect.height,
-        pointer: pointerRef.current,
+        pointer: visualPointer,
+        music,
         specialEvent: { active: Boolean(specialEventLabel), label: specialEventLabel },
       });
       pointerRef.current.dx *= visualizerTiming.pointerVelocityDecay;
@@ -137,6 +327,23 @@ export function Visualizer({ scene }: VisualizerProps) {
   return (
     <>
       <canvas ref={canvasRef} className="visualizer" aria-label={scene.description} />
+      <div className="midi-player" aria-label="Reproductor MIDI">
+        <div className="midi-track">
+          <span>{currentTrack.title}</span>
+          {midiError ? <small>{midiError}</small> : <small>{isMidiPlaying ? 'sonando' : 'pausado'}</small>}
+        </div>
+        <div className="midi-controls">
+          <button type="button" onClick={playPreviousTrack} aria-label="Cancion anterior">
+            <SkipBack aria-hidden="true" size={16} strokeWidth={2.2} />
+          </button>
+          <button type="button" onClick={() => (isMidiPlaying ? stopMidi() : void playMidi())} aria-label={isMidiPlaying ? 'Pausar MIDI' : 'Reproducir MIDI'}>
+            {isMidiPlaying ? <Pause aria-hidden="true" size={16} strokeWidth={2.2} /> : <Play aria-hidden="true" size={16} strokeWidth={2.2} />}
+          </button>
+          <button type="button" onClick={playNextTrack} aria-label="Siguiente cancion">
+            <SkipForward aria-hidden="true" size={16} strokeWidth={2.2} />
+          </button>
+        </div>
+      </div>
       {visualizerFeatures.showSpecialEventTestButton ? (
         <button className="special-event-test" type="button" onClick={() => setTestSpecialEvent((current) => (current ? null : '11:11'))}>
           {testSpecialEvent ? 'Ocultar evento especial' : 'Probar evento especial'}

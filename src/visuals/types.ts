@@ -17,6 +17,11 @@ export type SceneFrame = {
   width: number;
   height: number;
   pointer: PointerPosition;
+  music: {
+    active: boolean;
+    energy: number;
+    beat: number;
+  };
   specialEvent: {
     active: boolean;
     label: string | null;

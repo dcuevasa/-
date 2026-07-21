@@ -235,12 +235,19 @@ function createQuantumScene(): SceneRuntime {
         qubit.pair = (index + Math.floor(count / 2)) % count;
       });
     },
-    render({ context, time, delta, width, height, pointer, specialEvent }) {
+    render({ context, time, delta, width, height, pointer, music, specialEvent }) {
       drawBackground(context, time, width, height, pointer);
       if (specialEvent.active) drawQuantumGate(context, time, width, height, specialEvent.label);
       drawEntanglement(context, qubits, time);
       drawRipples(context, ripples, delta);
       for (const [index, qubit] of qubits.entries()) {
+        if (music.active) {
+          const targetAngle = (index / qubits.length) * TAU + time * (0.9 + music.beat * 1.8);
+          const targetRadius = Math.min(width, height) * (0.2 + music.energy * 0.12);
+          qubit.vx += (width * 0.5 + Math.cos(targetAngle) * targetRadius - qubit.x) * delta * 1.1;
+          qubit.vy += (height * 0.5 + Math.sin(targetAngle) * targetRadius - qubit.y) * delta * 1.1;
+          qubit.energy = Math.max(qubit.energy, 0.45 + music.energy * 0.55);
+        }
         if (specialEvent.active) {
           const targetAngle = (index / qubits.length) * TAU + time * 0.42;
           const targetRadius = Math.min(width, height) * 0.28;

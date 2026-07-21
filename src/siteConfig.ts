@@ -24,5 +24,5 @@ export const visualizerTiming = {
 };
 
 export const visualizerFeatures = {
-  showSpecialEventTestButton: true,
+  showSpecialEventTestButton: false,
 };

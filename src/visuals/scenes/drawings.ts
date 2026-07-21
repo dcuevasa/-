@@ -123,7 +123,7 @@ function createDrawingsScene(): SceneRuntime {
       height = nextHeight;
       sheets = entries.map(([path, content], index) => sheets[index] ?? createSheet(path, content, index, width, height));
     },
-    render({ context, time, delta, pointer, specialEvent }) {
+    render({ context, time, delta, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#496c78', '#d4b28d']);
       if (specialEvent.active) drawGallerySpotlight(context, time, width, height, specialEvent.label);
 
@@ -137,6 +137,13 @@ function createDrawingsScene(): SceneRuntime {
         sheet.vy += pointer.dy * height * influence * 4 * delta;
         sheet.spin += (pointer.dx * 7 - pointer.dy * 4) * influence * delta;
         sheet.fold += (pointer.dx + pointer.dy) * influence * 2.5 * delta;
+
+        if (music.active) {
+          sheet.vx += Math.sin(time * 4.2 + sheet.seed) * music.energy * 32 * delta;
+          sheet.vy += Math.cos(time * 5.4 + sheet.seed) * music.energy * 24 * delta;
+          sheet.spin += (music.beat - 0.5) * music.energy * 6 * delta;
+          sheet.fold += Math.sin(time * 10 + index) * music.energy * delta * 2;
+        }
 
         if (specialEvent.active) {
           const column = (index % 3) - 1;

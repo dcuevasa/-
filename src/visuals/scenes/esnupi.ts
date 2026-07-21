@@ -638,7 +638,7 @@ function createEsnupiScene(): SceneRuntime {
       esnupi = { ...esnupi, x: width * 0.5, y: height * 0.67 };
       bird = { ...bird, x: width * 0.42, y: height * 0.42 };
     },
-    render({ context, time, delta, pointer, specialEvent }) {
+    render({ context, time, delta, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#8fcbd0', '#f0d49b']);
       const houseX = width * 0.5;
       const houseY = height * 0.73;
@@ -655,12 +655,23 @@ function createEsnupiScene(): SceneRuntime {
         context.stroke();
       }
 
+      if (music.active && esnupi.activity !== 'chase' && !specialEvent.active) {
+        esnupi.activity = 'dance';
+        esnupi.activityTime = Math.max(esnupi.activityTime, 2.2);
+        esnupi.hop = Math.max(esnupi.hop, music.energy * 26 + music.beat * 8);
+      }
+
       if (specialEvent.active && esnupi.activity !== 'chase') {
         esnupi.activity = 'pilot';
         esnupi.activityTime = Math.max(esnupi.activityTime, 2.5);
       }
       updateEsnupi(esnupi, bird, pointer, delta, width, height, sparks);
       updateBird(bird, esnupi, pointer, delta, width, height);
+      if (music.active) {
+        bird.vx += Math.cos(time * 6) * music.energy * 28 * delta;
+        bird.vy += Math.sin(time * 7) * music.energy * 22 * delta;
+        if (Math.random() < delta * music.energy * 4) sparks.push({ x: esnupi.x + randomRange(-42, 42), y: esnupi.y - 112, vx: randomRange(-18, 18), vy: randomRange(-38, -18), life: 0.75, text: '♪' });
+      }
       if (specialEvent.active) {
         const orbit = time * 1.9;
         const targetX = width * 0.5 + Math.cos(orbit) * Math.min(width * 0.22, 170);

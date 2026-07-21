@@ -267,7 +267,7 @@ function createPetsScene(): SceneRuntime {
       const count = clamp(Math.round(width / 340), 3, 6);
       pets = Array.from({ length: count }, (_, index) => pets[index] ?? cowDefinition.create(index, width, height));
     },
-    render({ context, time, delta, pointer, specialEvent }) {
+    render({ context, time, delta, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#9fd0d4', '#e7d6a1']);
 
       context.fillStyle = '#6ca35b';
@@ -279,7 +279,8 @@ function createPetsScene(): SceneRuntime {
       const cowDefinition = petDefinitions[0];
       for (const pet of pets) {
         cowDefinition.update(pet, grass, pointer, delta, width, height);
-        const lift = specialEvent.active ? 82 + Math.sin(time * 2.8 + pet.seed) * 18 : 0;
+        const musicLift = music.active ? Math.max(10, music.energy * 78) * (0.45 + music.beat) + Math.sin(time * 8 + pet.seed) * music.energy * 14 : 0;
+        const lift = (specialEvent.active ? 82 + Math.sin(time * 2.8 + pet.seed) * 18 : 0) + musicLift;
         cowDefinition.draw(context, pet, time, lift);
       }
     },

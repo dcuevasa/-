@@ -264,7 +264,7 @@ function createOctopusScene(): SceneRuntime {
       const count = clamp(Math.round((width * height) / 180000), 3, 5);
       octopuses = Array.from({ length: count }, (_, index) => octopuses[index] ?? createOctopus(width, height, index + 1));
     },
-    render({ context, time, delta, pointer, specialEvent }) {
+    render({ context, time, delta, pointer, music, specialEvent }) {
       lightX = lerp(lightX, pointer.active ? pointer.x : 0.5, 0.045);
       lightY = lerp(lightY, pointer.active ? pointer.y : 0.42, 0.045);
       clearRadial(context, width, height, lightX * width, lightY * height, ['#2263a5', '#123f72', '#07192b']);
@@ -284,6 +284,13 @@ function createOctopusScene(): SceneRuntime {
       renderInk(context, inkDrops, delta);
 
       for (const octopus of octopuses) {
+        if (music.active) {
+          const danceAngle = time * 3.2 + octopus.seed;
+          octopus.vx += Math.cos(danceAngle) * (26 + music.energy * 150) * delta;
+          octopus.vy += Math.sin(danceAngle) * (18 + music.beat * 72) * delta;
+          octopus.pulse += delta * (2 + music.energy * 9);
+          octopus.startled = Math.max(octopus.startled, music.energy * 0.85);
+        }
         if (specialEvent.active) {
           const tideAngle = Math.atan2(octopus.y - height * 0.3, octopus.x - width * 0.5) + Math.PI / 2;
           octopus.vx += Math.cos(tideAngle) * 38 * delta;

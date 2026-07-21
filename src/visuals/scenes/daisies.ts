@@ -94,11 +94,16 @@ function createDaisiesScene(): SceneRuntime {
 
   return {
     resize,
-    render({ context, time, delta, width, height, pointer, specialEvent }) {
+    render({ context, time, delta, width, height, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#9fbf88', '#e5d29e']);
       if (specialEvent.active) drawDaisyCrown(context, time, width, height, specialEvent.label);
       for (const [index, daisy] of daisies.entries()) {
         applyBreeze(daisy, pointer, delta);
+        if (music.active) {
+          daisy.vx += Math.sin(time * 5 + daisy.seed) * music.energy * 18 * delta;
+          daisy.vy -= music.beat * music.energy * 42 * delta;
+          daisy.spin += (1.6 + music.energy * 8) * delta;
+        }
         if (specialEvent.active) {
           const targetAngle = (index / daisies.length) * TAU - time * 0.5;
           const targetRadius = Math.min(width, height) * 0.2;
@@ -124,7 +129,7 @@ function createDaisiesScene(): SceneRuntime {
         }
 
         daisy.x = wrap(daisy.x, -80, width + 80);
-        drawDaisy(context, daisy.x, daisy.y, daisy.size, daisy.angle);
+        drawDaisy(context, daisy.x, daisy.y, daisy.size * (music.active ? 1 + music.energy * 0.42 : 1), daisy.angle);
       }
     },
   };

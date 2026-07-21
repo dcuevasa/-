@@ -56,7 +56,7 @@ function createFilmScene(): SceneRuntime {
   ];
 
   return {
-    render({ context, time, delta, width, height, pointer, specialEvent }) {
+    render({ context, time, delta, width, height, pointer, music, specialEvent }) {
       clearLinear(context, width, height, ['#261f2c', '#bb6f5a']);
       if (specialEvent.active) drawProjector(context, time, width, height, specialEvent.label);
       const stripHeight = Math.max(86, height * 0.18);
@@ -67,9 +67,9 @@ function createFilmScene(): SceneRuntime {
       for (const [laneIndex, lane] of lanes.entries()) {
         const y = height * lane.yRate;
         const nearLane = pointer.active && Math.abs(pointerY - y) < stripHeight * 0.8;
-        lane.entangle += specialEvent.active || (nearLane && pointerSpeed < 9) ? delta * 0.9 : -delta * 0.75;
+        lane.entangle += specialEvent.active || music.active || (nearLane && pointerSpeed < 9) ? delta * 0.9 : -delta * 0.75;
         lane.entangle = Math.max(0, Math.min(1, lane.entangle));
-        lane.offset += (lane.speed * (specialEvent.active ? 1.8 : 1) + pointer.dx * width * (nearLane ? 5 : 0)) * delta;
+        lane.offset += (lane.speed * (specialEvent.active ? 1.8 : 1) * (music.active ? 1 + music.energy * 0.8 : 1) + pointer.dx * width * (nearLane ? 5 : 0)) * delta;
         const offset = (lane.offset % 180) - 180;
         context.save();
         context.translate(offset, y);
@@ -78,7 +78,7 @@ function createFilmScene(): SceneRuntime {
           const worldX = x + offset;
           const distance = pointer.active ? Math.abs(worldX - pointerX) : 9999;
           const pull = Math.max(0, 1 - distance / 220) * lane.entangle;
-          const knot = Math.sin(time * 7 + x * 0.04 + laneIndex) * stripHeight * 0.34 * pull;
+          const knot = Math.sin(time * (7 + music.beat * 5) + x * 0.04 + laneIndex) * stripHeight * (0.34 + music.energy * 0.18) * pull;
           const push = nearLane ? pointer.dy * height * Math.max(0, 1 - distance / 280) * 2.2 : 0;
           const localY = knot + push;
           context.fillStyle = 'rgba(23, 19, 24, 0.84)';
