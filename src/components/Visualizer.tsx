@@ -17,6 +17,23 @@ type MidiTrack = {
 type ScheduledNote = {
   oscillators: OscillatorNode[];
   gain: GainNode;
+  stopTime: number;
+};
+
+type AudioProfile = {
+  key: 'desktop' | 'mobile';
+  peakScale: number;
+  partialScale: number;
+  durationScale: number;
+  masterGain: number;
+  maxScheduledNotes: number;
+};
+
+type AudioOutput = {
+  input: GainNode;
+  compressor: DynamicsCompressorNode;
+  master: GainNode;
+  profileKey: AudioProfile['key'];
 };
 
 type AudioWindow = Window & typeof globalThis & {
@@ -39,6 +56,24 @@ const midiTracks: MidiTrack[] = Object.entries(midiModules)
 const scheduleAheadSeconds = 0.45;
 const schedulerIntervalMs = 90;
 
+const desktopAudioProfile: AudioProfile = {
+  key: 'desktop',
+  peakScale: 0.9,
+  partialScale: 1,
+  durationScale: 1,
+  masterGain: 0.78,
+  maxScheduledNotes: 160,
+};
+
+const mobileAudioProfile: AudioProfile = {
+  key: 'mobile',
+  peakScale: 0.48,
+  partialScale: 0.8,
+  durationScale: 0.72,
+  masterGain: 0.58,
+  maxScheduledNotes: 86,
+};
+
 function getMirrorHour(date: Date) {
   const hours = date.getHours().toString().padStart(2, '0');
   const minutes = date.getMinutes().toString().padStart(2, '0');
@@ -57,6 +92,42 @@ function noteEnergy(notes: MidiNote[], position: number) {
   return energy;
 }
 
+function getAudioProfile() {
+  const prefersTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+  return prefersTouch || window.innerWidth < 760 ? mobileAudioProfile : desktopAudioProfile;
+}
+
+function createAudioOutput(audioContext: AudioContext, profile: AudioProfile): AudioOutput {
+  const input = audioContext.createGain();
+  const compressor = audioContext.createDynamicsCompressor();
+  const master = audioContext.createGain();
+
+  compressor.threshold.setValueAtTime(profile.key === 'mobile' ? -25 : -18, audioContext.currentTime);
+  compressor.knee.setValueAtTime(18, audioContext.currentTime);
+  compressor.ratio.setValueAtTime(profile.key === 'mobile' ? 8 : 5, audioContext.currentTime);
+  compressor.attack.setValueAtTime(0.004, audioContext.currentTime);
+  compressor.release.setValueAtTime(profile.key === 'mobile' ? 0.18 : 0.24, audioContext.currentTime);
+  master.gain.setValueAtTime(profile.masterGain, audioContext.currentTime);
+
+  input.connect(compressor).connect(master).connect(audioContext.destination);
+  return { input, compressor, master, profileKey: profile.key };
+}
+
+function updateAudioOutput(output: AudioOutput, audioContext: AudioContext, profile: AudioProfile) {
+  output.compressor.threshold.setTargetAtTime(profile.key === 'mobile' ? -25 : -18, audioContext.currentTime, 0.03);
+  output.compressor.ratio.setTargetAtTime(profile.key === 'mobile' ? 8 : 5, audioContext.currentTime, 0.03);
+  output.compressor.release.setTargetAtTime(profile.key === 'mobile' ? 0.18 : 0.24, audioContext.currentTime, 0.03);
+  output.master.gain.setTargetAtTime(profile.masterGain, audioContext.currentTime, 0.03);
+  output.profileKey = profile.key;
+}
+
+function disconnectAudioOutput(output: AudioOutput | null) {
+  if (!output) return;
+  output.input.disconnect();
+  output.compressor.disconnect();
+  output.master.disconnect();
+}
+
 function stopScheduledNotes(notes: ScheduledNote[]) {
   for (const note of notes) {
     try {
@@ -70,17 +141,18 @@ function stopScheduledNotes(notes: ScheduledNote[]) {
   notes.length = 0;
 }
 
-function scheduleMusicBoxNote(audioContext: AudioContext, note: MidiNote, startTime: number) {
+function scheduleMusicBoxNote(audioContext: AudioContext, note: MidiNote, startTime: number, destination: AudioNode, profile: AudioProfile) {
   const isPercussion = note.channel === 9;
-  const duration = isPercussion ? 0.42 : Math.min(Math.max(note.duration, 0.95), 2.6);
+  const duration = (isPercussion ? 0.34 : Math.min(Math.max(note.duration, 0.85), 2.3)) * profile.durationScale;
   const gain = audioContext.createGain();
   const oscillators: OscillatorNode[] = [];
-  const peakGain = isPercussion ? Math.min(0.16, 0.05 + note.velocity * 0.12) : Math.min(0.26, 0.1 + note.velocity * 0.17);
+  const peakGain = (isPercussion ? Math.min(0.12, 0.04 + note.velocity * 0.09) : Math.min(0.2, 0.08 + note.velocity * 0.13)) * profile.peakScale;
 
   gain.gain.setValueAtTime(0, startTime);
   gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.007);
   gain.gain.exponentialRampToValueAtTime(peakGain * (isPercussion ? 0.18 : 0.34), startTime + (isPercussion ? 0.055 : 0.16));
   gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  gain.connect(destination);
 
   const addPartial = (frequency: number, type: OscillatorType, level: number, detune = 0) => {
     const oscillator = audioContext.createOscillator();
@@ -88,8 +160,8 @@ function scheduleMusicBoxNote(audioContext: AudioContext, note: MidiNote, startT
     oscillator.type = type;
     oscillator.frequency.setValueAtTime(frequency, startTime);
     oscillator.detune.setValueAtTime(detune, startTime);
-    partialGain.gain.setValueAtTime(level, startTime);
-    oscillator.connect(partialGain).connect(gain).connect(audioContext.destination);
+    partialGain.gain.setValueAtTime(level * profile.partialScale, startTime);
+    oscillator.connect(partialGain).connect(gain);
     oscillator.start(startTime);
     oscillator.stop(startTime + duration + 0.05);
     oscillators.push(oscillator);
@@ -101,22 +173,22 @@ function scheduleMusicBoxNote(audioContext: AudioContext, note: MidiNote, startT
     const frequency = midiFrequency(baseMidi);
     addPartial(frequency, isLowHit ? 'triangle' : 'sine', isLowHit ? 0.7 : 0.55);
     addPartial(frequency * (isLowHit ? 0.5 : 2.02), 'sine', isLowHit ? 0.5 : 0.24);
-    addPartial(frequency * 3.01, 'sine', 0.1, 5);
+    if (profile.key === 'desktop') addPartial(frequency * 3.01, 'sine', 0.1, 5);
   } else {
     const frequency = midiFrequency(note.midi);
     const liftedFrequency = note.midi < 48 ? frequency * 2 : frequency;
     addPartial(liftedFrequency, 'triangle', 0.72);
     addPartial(liftedFrequency * 2.01, 'sine', 0.28, 3);
-    addPartial(liftedFrequency * 3.02, 'sine', 0.13, -4);
+    if (profile.key === 'desktop' || note.velocity > 0.6) addPartial(liftedFrequency * 3.02, 'sine', 0.13, -4);
     if (note.midi < 64) {
-      addPartial(frequency, 'sine', 0.28);
-      addPartial(frequency * 0.5, 'sine', 0.12);
+      addPartial(frequency, 'sine', profile.key === 'mobile' ? 0.16 : 0.28);
+      if (profile.key === 'desktop') addPartial(frequency * 0.5, 'sine', 0.12);
     } else {
-      addPartial(liftedFrequency * 0.5, 'sine', 0.08);
+      if (profile.key === 'desktop') addPartial(liftedFrequency * 0.5, 'sine', 0.08);
     }
   }
 
-  return { oscillators, gain };
+  return { oscillators, gain, stopTime: startTime + duration + 0.06 };
 }
 
 export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
@@ -125,6 +197,7 @@ export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
   const musicRef = useRef({ active: false, energy: 0, beat: 0 });
   const parsedTracksRef = useRef(new Map<number, ParsedMidi>());
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioOutputRef = useRef<AudioOutput | null>(null);
   const schedulerRef = useRef<number | undefined>(undefined);
   const playbackStartRef = useRef(0);
   const nextNoteIndexRef = useRef(0);
@@ -166,6 +239,10 @@ export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
       const audioContext = audioContextRef.current ?? new AudioContextConstructor();
       audioContextRef.current = audioContext;
       await audioContext.resume();
+      const audioProfile = getAudioProfile();
+      const audioOutput = audioOutputRef.current ?? createAudioOutput(audioContext, audioProfile);
+      audioOutputRef.current = audioOutput;
+      updateAudioOutput(audioOutput, audioContext, audioProfile);
 
       stopMidi();
       setMidiError(null);
@@ -187,14 +264,15 @@ export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
           const note = parsedTrack.notes[nextNoteIndexRef.current];
           nextNoteIndexRef.current += 1;
           if (note.channel !== 9 && (note.midi < 30 || note.midi > 100)) continue;
+          if (scheduledNotesRef.current.length >= audioProfile.maxScheduledNotes && note.velocity < 0.76) continue;
 
           const startTime = playbackStartRef.current + note.start;
-          scheduledNotesRef.current.push(scheduleMusicBoxNote(audioContext, note, startTime));
+          scheduledNotesRef.current.push(scheduleMusicBoxNote(audioContext, note, startTime, audioOutput.input, audioProfile));
         }
 
         scheduledNotesRef.current = scheduledNotesRef.current.filter((note) => {
           try {
-            return note.gain.gain.value > 0;
+            return note.stopTime > audioContext.currentTime;
           } catch {
             return false;
           }
@@ -230,7 +308,11 @@ export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
     testSpecialEventRef.current = testSpecialEvent;
   }, [testSpecialEvent]);
 
-  useEffect(() => stopMidi, []);
+  useEffect(() => () => {
+    stopMidi();
+    disconnectAudioOutput(audioOutputRef.current);
+    audioOutputRef.current = null;
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
