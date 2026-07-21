@@ -3,6 +3,7 @@ export type MidiNote = {
   duration: number;
   midi: number;
   velocity: number;
+  channel: number;
 };
 
 export type ParsedMidi = {
@@ -21,6 +22,7 @@ type RawNote = {
   endTick: number;
   midi: number;
   velocity: number;
+  channel: number;
 };
 
 const DEFAULT_TEMPO = 500000;
@@ -116,7 +118,7 @@ function parseTrack(view: DataView, start: number, end: number, rawNotes: RawNot
 
     const key = `${channel}:${first}`;
     if (command === 0x90 && second > 0) {
-      const note: RawNote = { startTick: tick, endTick: tick, midi: first, velocity: second / 127 };
+      const note: RawNote = { startTick: tick, endTick: tick, midi: first, velocity: second / 127, channel };
       const notes = openNotes.get(key) ?? [];
       notes.push(note);
       openNotes.set(key, notes);
@@ -168,6 +170,7 @@ export function parseMidi(arrayBuffer: ArrayBuffer, title: string): ParsedMidi {
         duration: Math.max(0.08, end - start),
         midi: note.midi,
         velocity: note.velocity,
+        channel: note.channel,
       };
     })
     .sort((left, right) => left.start - right.start);

@@ -70,26 +70,38 @@ function createFilmScene(): SceneRuntime {
         lane.entangle += specialEvent.active || music.active || (nearLane && pointerSpeed < 9) ? delta * 0.9 : -delta * 0.75;
         lane.entangle = Math.max(0, Math.min(1, lane.entangle));
         lane.offset += (lane.speed * (specialEvent.active ? 1.8 : 1) * (music.active ? 1 + music.energy * 0.8 : 1) + pointer.dx * width * (nearLane ? 5 : 0)) * delta;
-        const offset = (lane.offset % 180) - 180;
+        const frameWidth = 72;
+        const frameGap = 0;
+        const framePitch = frameWidth + frameGap;
+        const offset = (lane.offset % framePitch) - framePitch;
         context.save();
         context.translate(offset, y);
         context.rotate((laneIndex - 1) * 0.08 + lane.entangle * Math.sin(time * 3 + laneIndex) * 0.08);
-        for (let x = -40; x < width + 260; x += 24) {
+        for (let x = -framePitch; x < width + framePitch * 2; x += framePitch) {
           const worldX = x + offset;
           const distance = pointer.active ? Math.abs(worldX - pointerX) : 9999;
           const pull = Math.max(0, 1 - distance / 220) * lane.entangle;
           const knot = Math.sin(time * (7 + music.beat * 5) + x * 0.04 + laneIndex) * stripHeight * (0.34 + music.energy * 0.18) * pull;
           const push = nearLane ? pointer.dy * height * Math.max(0, 1 - distance / 280) * 2.2 : 0;
           const localY = knot + push;
+          const frameHeight = stripHeight;
+          const perforationWidth = Math.max(7, frameWidth * 0.12);
+          const perforationHeight = Math.max(8, frameHeight * 0.12);
+
           context.fillStyle = 'rgba(23, 19, 24, 0.84)';
-          context.fillRect(x, -stripHeight / 2 + localY, 26, stripHeight);
+          context.fillRect(x, -frameHeight / 2 + localY, frameWidth, frameHeight);
+
           context.fillStyle = 'rgba(255, 242, 196, 0.88)';
-          context.fillRect(x + 5, -stripHeight / 2 + 10 + localY, 10, 10);
-          context.fillRect(x + 5, stripHeight / 2 - 20 + localY, 10, 10);
-          if (x % 72 === 0) {
-            context.strokeStyle = 'rgba(255, 242, 196, 0.24)';
-            context.strokeRect(x + 18, -stripHeight / 2 + 28 + localY, 46, stripHeight - 56);
+          for (let perforation = 0; perforation < 3; perforation += 1) {
+            const perforationX = x + 10 + perforation * ((frameWidth - perforationWidth - 20) / 2);
+            context.fillRect(perforationX, -frameHeight / 2 + 9 + localY, perforationWidth, perforationHeight);
+            context.fillRect(perforationX, frameHeight / 2 - 9 - perforationHeight + localY, perforationWidth, perforationHeight);
           }
+
+          context.fillRect(x + 14, -frameHeight / 2 + 28 + localY, frameWidth - 28, frameHeight - 56);
+          context.strokeStyle = 'rgba(255, 242, 196, 0.26)';
+          context.lineWidth = 1.4;
+          context.strokeRect(x + 10, -frameHeight / 2 + 26 + localY, frameWidth - 20, frameHeight - 52);
         }
         context.restore();
       }

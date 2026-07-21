@@ -70,6 +70,55 @@ function stopScheduledNotes(notes: ScheduledNote[]) {
   notes.length = 0;
 }
 
+function scheduleMusicBoxNote(audioContext: AudioContext, note: MidiNote, startTime: number) {
+  const isPercussion = note.channel === 9;
+  const duration = isPercussion ? 0.42 : Math.min(Math.max(note.duration, 0.95), 2.6);
+  const gain = audioContext.createGain();
+  const oscillators: OscillatorNode[] = [];
+  const peakGain = isPercussion ? Math.min(0.16, 0.05 + note.velocity * 0.12) : Math.min(0.26, 0.1 + note.velocity * 0.17);
+
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.007);
+  gain.gain.exponentialRampToValueAtTime(peakGain * (isPercussion ? 0.18 : 0.34), startTime + (isPercussion ? 0.055 : 0.16));
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+  const addPartial = (frequency: number, type: OscillatorType, level: number, detune = 0) => {
+    const oscillator = audioContext.createOscillator();
+    const partialGain = audioContext.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    oscillator.detune.setValueAtTime(detune, startTime);
+    partialGain.gain.setValueAtTime(level, startTime);
+    oscillator.connect(partialGain).connect(gain).connect(audioContext.destination);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.05);
+    oscillators.push(oscillator);
+  };
+
+  if (isPercussion) {
+    const isLowHit = note.midi <= 38;
+    const baseMidi = isLowHit ? 48 : 76 + (note.midi % 7);
+    const frequency = midiFrequency(baseMidi);
+    addPartial(frequency, isLowHit ? 'triangle' : 'sine', isLowHit ? 0.7 : 0.55);
+    addPartial(frequency * (isLowHit ? 0.5 : 2.02), 'sine', isLowHit ? 0.5 : 0.24);
+    addPartial(frequency * 3.01, 'sine', 0.1, 5);
+  } else {
+    const frequency = midiFrequency(note.midi);
+    const liftedFrequency = note.midi < 48 ? frequency * 2 : frequency;
+    addPartial(liftedFrequency, 'triangle', 0.72);
+    addPartial(liftedFrequency * 2.01, 'sine', 0.28, 3);
+    addPartial(liftedFrequency * 3.02, 'sine', 0.13, -4);
+    if (note.midi < 64) {
+      addPartial(frequency, 'sine', 0.28);
+      addPartial(frequency * 0.5, 'sine', 0.12);
+    } else {
+      addPartial(liftedFrequency * 0.5, 'sine', 0.08);
+    }
+  }
+
+  return { oscillators, gain };
+}
+
 export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const pointerRef = useRef({ x: 0.5, y: 0.5, dx: 0, dy: 0, active: false });
@@ -137,37 +186,10 @@ export function Visualizer({ scene, controlsVisible }: VisualizerProps) {
         while (nextNoteIndexRef.current < parsedTrack.notes.length && parsedTrack.notes[nextNoteIndexRef.current].start < position + scheduleAheadSeconds) {
           const note = parsedTrack.notes[nextNoteIndexRef.current];
           nextNoteIndexRef.current += 1;
-          if (note.midi < 36 || note.midi > 96) continue;
+          if (note.channel !== 9 && (note.midi < 30 || note.midi > 100)) continue;
 
           const startTime = playbackStartRef.current + note.start;
-          const duration = Math.min(Math.max(note.duration, 0.85), 2.2);
-          const frequency = midiFrequency(note.midi < 72 ? note.midi + 12 : note.midi);
-          const gain = audioContext.createGain();
-          const oscillators = [audioContext.createOscillator(), audioContext.createOscillator(), audioContext.createOscillator()];
-          const partialGains = [audioContext.createGain(), audioContext.createGain(), audioContext.createGain()];
-          const peakGain = Math.min(0.24, 0.1 + note.velocity * 0.16);
-
-          oscillators[0].type = 'triangle';
-          oscillators[1].type = 'sine';
-          oscillators[2].type = 'sine';
-          oscillators[0].frequency.setValueAtTime(frequency, startTime);
-          oscillators[1].frequency.setValueAtTime(frequency * 2.01, startTime);
-          oscillators[2].frequency.setValueAtTime(frequency * 3.02, startTime);
-
-          partialGains[0].gain.setValueAtTime(0.78, startTime);
-          partialGains[1].gain.setValueAtTime(0.32, startTime);
-          partialGains[2].gain.setValueAtTime(0.16, startTime);
-          gain.gain.setValueAtTime(0, startTime);
-          gain.gain.linearRampToValueAtTime(peakGain, startTime + 0.008);
-          gain.gain.exponentialRampToValueAtTime(peakGain * 0.32, startTime + 0.12);
-          gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-          oscillators.forEach((oscillator, partialIndex) => {
-            oscillator.connect(partialGains[partialIndex]).connect(gain).connect(audioContext.destination);
-            oscillator.start(startTime);
-            oscillator.stop(startTime + duration + 0.05);
-          });
-          scheduledNotesRef.current.push({ oscillators, gain });
+          scheduledNotesRef.current.push(scheduleMusicBoxNote(audioContext, note, startTime));
         }
 
         scheduledNotesRef.current = scheduledNotesRef.current.filter((note) => {

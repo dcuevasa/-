@@ -219,6 +219,47 @@ function drawQuantumGate(context: CanvasRenderingContext2D, time: number, width:
   context.restore();
 }
 
+function drawMusicVisualizer(context: CanvasRenderingContext2D, qubits: Qubit[], time: number, width: number, height: number, energy: number, beat: number) {
+  const centerX = width * 0.5;
+  const centerY = height * 0.5;
+  const baseRadius = Math.min(width, height) * (0.23 + energy * 0.05);
+  const pulse = 0.55 + beat * 0.45;
+
+  context.save();
+  const glow = context.createRadialGradient(centerX, centerY, baseRadius * 0.2, centerX, centerY, baseRadius * 2.1);
+  glow.addColorStop(0, `rgba(127, 236, 224, ${0.1 + energy * 0.18})`);
+  glow.addColorStop(0.46, `rgba(244, 207, 106, ${0.12 + beat * 0.14})`);
+  glow.addColorStop(1, 'rgba(127, 236, 224, 0)');
+  context.fillStyle = glow;
+  context.fillRect(0, 0, width, height);
+
+  context.lineCap = 'round';
+  for (let index = 0; index < 72; index += 1) {
+    const angle = (index / 72) * TAU + time * 0.22;
+    const wave = Math.sin(time * 7 + index * 0.62) * 0.5 + 0.5;
+    const paired = qubits[index % qubits.length]?.energy ?? energy;
+    const length = 12 + wave * 22 + paired * 32 + energy * 46 * pulse;
+    const inner = baseRadius - 8;
+    const outer = baseRadius + length;
+    const hue = index % 2 === 0 ? '127, 236, 224' : '244, 207, 106';
+    context.strokeStyle = `rgba(${hue}, ${0.18 + energy * 0.42 + wave * 0.16})`;
+    context.lineWidth = 2 + energy * 3.8;
+    context.beginPath();
+    context.moveTo(centerX + Math.cos(angle) * inner, centerY + Math.sin(angle) * inner);
+    context.lineTo(centerX + Math.cos(angle) * outer, centerY + Math.sin(angle) * outer);
+    context.stroke();
+  }
+
+  context.strokeStyle = `rgba(201, 255, 248, ${0.32 + energy * 0.4})`;
+  context.lineWidth = 2 + beat * 3;
+  for (let ring = 0; ring < 3; ring += 1) {
+    context.beginPath();
+    context.arc(centerX, centerY, baseRadius + ring * 18 + beat * 10, 0, TAU);
+    context.stroke();
+  }
+  context.restore();
+}
+
 function createQuantumScene(): SceneRuntime {
   const ripples: MeasurementRipple[] = [];
   let width = 1;
@@ -237,16 +278,22 @@ function createQuantumScene(): SceneRuntime {
     },
     render({ context, time, delta, width, height, pointer, music, specialEvent }) {
       drawBackground(context, time, width, height, pointer);
+      if (music.active) drawMusicVisualizer(context, qubits, time, width, height, music.energy, music.beat);
       if (specialEvent.active) drawQuantumGate(context, time, width, height, specialEvent.label);
       drawEntanglement(context, qubits, time);
       drawRipples(context, ripples, delta);
       for (const [index, qubit] of qubits.entries()) {
         if (music.active) {
-          const targetAngle = (index / qubits.length) * TAU + time * (0.9 + music.beat * 1.8);
-          const targetRadius = Math.min(width, height) * (0.2 + music.energy * 0.12);
-          qubit.vx += (width * 0.5 + Math.cos(targetAngle) * targetRadius - qubit.x) * delta * 1.1;
-          qubit.vy += (height * 0.5 + Math.sin(targetAngle) * targetRadius - qubit.y) * delta * 1.1;
-          qubit.energy = Math.max(qubit.energy, 0.45 + music.energy * 0.55);
+          const targetAngle = (index / qubits.length) * TAU + time * (1.15 + music.beat * 2.8);
+          const wave = Math.sin(time * 8 + index * 1.37) * 0.5 + 0.5;
+          const targetRadius = Math.min(width, height) * (0.24 + music.energy * 0.14) + wave * music.energy * 70 + music.beat * 28;
+          const targetX = width * 0.5 + Math.cos(targetAngle) * targetRadius;
+          const targetY = height * 0.5 + Math.sin(targetAngle) * targetRadius;
+          qubit.vx += (targetX - qubit.x) * delta * (2.4 + music.energy * 4.2);
+          qubit.vy += (targetY - qubit.y) * delta * (2.4 + music.energy * 4.2);
+          qubit.phase += delta * (4 + music.beat * 8 + music.energy * 10);
+          qubit.collapsed = Math.max(qubit.collapsed, music.beat * music.energy * 0.65);
+          qubit.energy = Math.max(qubit.energy, 0.62 + music.energy * 0.75);
         }
         if (specialEvent.active) {
           const targetAngle = (index / qubits.length) * TAU + time * 0.42;
